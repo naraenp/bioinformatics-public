@@ -25,6 +25,10 @@ venv/
 data/raw/
 datasets/raw/
 tcr_analysis/datasets/experimental/samples/
+preleukemia_analysis/data/
+preleukemia_analysis/figures/
+preleukemia_analysis/preleuk_dashboard/plots/
+nlp_proj/
 
 # IDE
 .vscode/
