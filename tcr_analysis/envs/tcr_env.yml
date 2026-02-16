@@ -1,0 +1,15 @@
+name: tcr_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10.14
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - seaborn=0.13.2
+  - matplotlib=3.9.2
+  - ipykernel=6.29.5
+  - scipy=1.14.1
+  - pip
+  - git
