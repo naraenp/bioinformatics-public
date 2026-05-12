@@ -1,0 +1,12 @@
+name: preleuk_dashboard
+title: preleuk_dashboard
+username: naraenp2
+account: naraenp2
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15642555
+bundleId: 10985144
+url: https://naraenp2.shinyapps.io/preleuk_dashboard/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
