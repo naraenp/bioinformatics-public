@@ -1,23 +1,25 @@
-## TCR Analysis Project
+# TCR clonality analysis
 
-### Purpose
+Bulk TCR-β repertoire analysis comparing **TB progressors vs. controllers**,
+testing whether repertoire clonality and *M. tuberculosis*-specific clonotype
+frequency differ between cohorts. Source data is drawn from [Musvosvi et al.,
+*Nature Medicine* (2022)](https://doi.org/10.1038/s41591-022-02110-9);
+methodology mirrors prior work published in *Frontiers in Immunology*.
 
-This project analyzes T-cell receptor (TCR) repertoire characteristics to study
-immune response patterns across participant groups.
+## Why it matters
 
-### Why it matters
+TCR diversity and clonality provide interpretable immune signatures linked to
+disease progression and vaccine response. Antigen-specific clonotype tracking
+adds a second axis beyond global repertoire shape.
 
-TCR diversity and clonality can provide interpretable immune signatures linked
-to disease progression and vaccine response.
+## Main contents
 
-### Main contents
-
-- `TCR_analysis.ipynb`: exploratory and analytical workflow.
+- `TCR_analysis.ipynb`: end-to-end exploratory and analytical workflow.
 - `datasets/`: experimental sample data and metadata.
-- `envs/tcr_env.yml`: environment specification.
+- `envs/tcr_env.yml`: pinned conda environment.
 - `envs/setup_env.sh`: helper script for environment creation and package setup.
 
-### Setup
+## Setup
 
 From `tcr_analysis/envs/`:
 
@@ -26,14 +28,14 @@ mamba env create -f tcr_env.yml
 conda activate tcr_env
 ```
 
-If needed, run:
+If needed, run the optional package setup:
 
 ```bash
 bash setup_env.sh
 ```
 
-### Suggested engineering workflow
+## Engineering workflow
 
-1. keep exploratory work in notebooks,
-2. promote stable analysis logic into scripts/functions,
-3. document parameter choices and output files for reproducibility.
+1. Keep exploratory work in notebooks.
+2. Promote stable analysis logic into versioned scripts or functions.
+3. Document parameter choices and output files for reproducibility.

@@ -1,37 +1,50 @@
-## Preleukemia scRNA-seq Analysis
+# AML scRNA-seq analysis
 
-### Purpose
+Reproducible scRNA-seq pipeline on **38 public AML patient samples**, performing
+QC, anchor-based integration, and reference-guided cell-type annotation to
+characterize pre-leukemic populations. Extended with pseudotime, fate mapping,
+and survival analysis of PLPS/Stem11 signatures against NCI clinical data, and
+deployed as an interactive R Shiny dashboard. Source data is drawn from [Zeng
+et al., *Cell Genomics* (2023)](https://doi.org/10.1016/j.xgen.2023.100426) and
+AML clinical data from NCI.
 
-This project analyzes public single-cell RNA-seq data and related metadata to
-investigate preleukemic cell populations and their potential disease trajectories.
+## Why it matters
 
-### Why it matters
+Early characterization of pre-leukemic signatures supports risk stratification
+and translational hypothesis generation in AML.
 
-Early characterization of preleukemic signatures can support downstream risk
-stratification and translational hypothesis generation.
+## Main contents
 
-### Main contents
+- `preleuk_analysis.R`: primary Seurat integration and annotation workflow.
+- `preleuk_analysis1.ipynb`, `preleuk_analysis2.ipynb`: downstream Python
+  analysis (pseudotime, fate mapping, metabolic activity, survival).
+- `preleuk_dashboard/`: R Shiny app for interactive result exploration.
+- `envs/`: conda environment definitions for each notebook.
+- `packages.R`: R dependency installer for the Seurat workflow.
 
-- `preleuk_analysis.R`: main Seurat integration/annotation workflow.
-- `preleuk_analysis1.ipynb` and `preleuk_analysis2.ipynb`: additional Python-based analysis.
-- `preleuk_dashboard/`: Shiny UI for interactive result exploration.
-- `envs/`: conda environment definitions.
-
-### Setup
+## Setup
 
 Create the relevant conda environment from `envs/`:
 
 ```bash
-conda env create -f preleuk_env1.yml
-conda env create -f preleuk_env2.yml
+conda env create -f envs/preleuk_env1.yml
+conda env create -f envs/preleuk_env2.yml
 ```
 
-### Reproducibility note
+Install R dependencies, then run the Seurat workflow:
 
-The R workflow now derives a project-relative working directory to avoid
-user-specific path assumptions.
+```bash
+Rscript packages.R
+Rscript preleuk_analysis.R
+```
 
-### Suggested next engineering step
+## Reproducibility notes
 
-Extract stable analysis blocks from notebooks into versioned scripts with
+The R workflow derives a project-relative working directory to avoid
+user-specific path assumptions. Pin dependency versions when adding to env
+files.
+
+## Suggested next engineering step
+
+Extract stable analysis blocks from the notebooks into versioned scripts with
 parameterized CLI inputs for repeatable pipeline runs.
