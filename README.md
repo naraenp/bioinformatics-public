@@ -32,6 +32,13 @@ bioinformatics-public/
 │   ├── preleuk_dashboard/
 │   ├── envs/
 │   └── README.md
+├── aml_rnaseq_nf/          # Nextflow bulk RNA-seq DE pipeline
+│   ├── main.nf
+│   ├── fetch_real_data.sh
+│   ├── run_local.sh
+│   ├── bin/
+│   ├── docs/
+│   └── envs/
 └── .gitignore
 ```
 
@@ -53,6 +60,16 @@ characterize pre-leukemic populations. Extended with pseudotime, fate mapping,
 and survival analysis of PLPS/Stem11 signatures against NCI clinical data, and
 deployed via an interactive R Shiny dashboard. Environment definitions live in
 `preleukemia_analysis/envs/`.
+
+### AML bulk RNA-seq DE pipeline (Nextflow)
+
+Small Nextflow DSL2 pipeline (`aml_rnaseq_nf/`) for a bulk RNA-seq differential
+expression comparison (AML vs. healthy). It runs on real public RNA-seq data —
+TCGA-LAML and GTEx whole blood, both pulled from
+[recount3](https://rna.recount.bio/) for uniform alignment/quantification.
+Four stages: `LOAD_COUNTS → NORMALIZE_COUNTS → RUN_DE → MAKE_VOLCANO`, with
+`fetch_real_data.sh` for the one-time download and `run_local.sh` mirroring the
+steps without Nextflow. See `aml_rnaseq_nf/docs/REPORT.md` for a run report.
 
 ## Reproducibility notes
 

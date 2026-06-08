@@ -1,0 +1,25 @@
+# Nextflow runtime artifacts
+.nextflow/
+.nextflow.log*
+work/
+trace.txt*
+timeline.html*
+report.html*
+dag.*
+
+# Pipeline outputs — regenerated per-run, not source.
+# Keep the directory itself with a placeholder so publishDir has a target.
+results/*
+!results/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Real-data downloads (recount3 + GENCODE GTF). Reproduced via README.
+data/real/*.gz
+
+# Editor / OS
+.DS_Store
+*.swp
