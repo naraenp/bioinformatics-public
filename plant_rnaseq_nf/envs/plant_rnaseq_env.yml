@@ -1,0 +1,24 @@
+name: plant_rnaseq_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # --- workflow + core scientific stack (kept in step with aml_rnaseq_env) ---
+  - python=3.11
+  - numpy=2.*
+  - pandas=2.*
+  - scipy=1.*
+  - plotly=6.*
+  - python-kaleido=0.2.*      # static PNG/SVG export for the portfolio assets
+  - nextflow=24.10.*
+  - pytest=8.*
+  # --- differential expression ---
+  - pydeseq2=0.5.*            # DESeq2 median-of-ratios + Wald test (Python port)
+  # --- short-read processing toolchain (the part aml_rnaseq_nf skips) ---
+  - sra-tools=3.*            # prefetch / fasterq-dump for the real SRA fetch
+  - seqtk=1.4.*             # deterministic read subsampling
+  - fastp=0.23.*            # adapter / quality trimming
+  - fastqc=0.12.*           # raw + trimmed QC reports
+  - hisat2=2.2.*            # spliced genome alignment (low-memory vs STAR)
+  - samtools=1.*            # sort / index BAMs
+  - subread=2.*             # featureCounts gene-level quantification

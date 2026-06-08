@@ -39,6 +39,13 @@ bioinformatics-public/
 │   ├── bin/
 │   ├── docs/
 │   └── envs/
+├── plant_rnaseq_nf/        # Nextflow plant RNA-seq DE pipeline (reads-in)
+│   ├── main.nf
+│   ├── fetch_real_data.sh
+│   ├── run_local.sh
+│   ├── bin/
+│   ├── docs/
+│   └── envs/
 └── .gitignore
 ```
 
@@ -70,6 +77,18 @@ TCGA-LAML and GTEx whole blood, both pulled from
 Four stages: `LOAD_COUNTS → NORMALIZE_COUNTS → RUN_DE → MAKE_VOLCANO`, with
 `fetch_real_data.sh` for the one-time download and `run_local.sh` mirroring the
 steps without Nextflow. See `aml_rnaseq_nf/docs/REPORT.md` for a run report.
+
+### Plant RNA-seq DE pipeline (Nextflow)
+
+Nextflow DSL2 pipeline (`plant_rnaseq_nf/`) taking **raw Illumina reads** from a
+drought-tolerant (Apo) and drought-susceptible (IR64) rice cultivar through QC,
+spliced **HISAT2 alignment**, `featureCounts` quantification, **pydeseq2**
+differential expression (`~condition + genotype`), and hypergeometric **GO
+enrichment** to interactive heatmap + enriched-process charts. The reads-in
+companion to `aml_rnaseq_nf`: reads are stream-subsampled from ENA and the
+reference comes from Ensembl Plants. `fetch_real_data.sh` pulls the data;
+`run_local.sh --demo` runs the whole DAG offline on a toy genome as the CI smoke
+test. See `plant_rnaseq_nf/docs/REPORT.md` for a run report.
 
 ## Reproducibility notes
 

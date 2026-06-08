@@ -1,0 +1,8 @@
+# plant_rnaseq_nf — runtime + downloaded artifacts (the repo-root .gitignore
+# already excludes *.gz/*.bam/*.fastq.gz/*.tsv/*.csv; these are belt-and-braces
+# for the directories this pipeline creates).
+data/
+results/
+work/
+.nextflow/
+.nextflow.log*
