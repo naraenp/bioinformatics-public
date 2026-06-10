@@ -1,0 +1,26 @@
+name: spatial_visium_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # --- workflow + core scientific stack (kept in step with plant/aml envs) ---
+  - python=3.11
+  - numpy=1.26.*           # squidpy/scanpy stack is happiest on numpy 1.x here
+  - pandas=2.*
+  - scipy=1.*              # scipy.optimize.nnls = the deconvolution workhorse
+  - scikit-learn=1.*       # kNN spatial graph for Moran's I
+  - plotly=6.*             # canonical outputs are interactive HTML (iframe-embedded)
+  - python-kaleido=0.2.*   # optional best-effort static PNG/SVG (--png); skipped if unavailable
+  - nextflow=24.10.*
+  - pytest=8.*
+  # --- single-cell + spatial stack ---
+  - anndata=0.10.*         # .h5ad handoffs between stages
+  - scanpy=1.10.*          # QC, normalize_total + log1p, HVGs
+  - squidpy=1.5.*          # spatial graph + Moran's I (sq.gr.spatial_neighbors / spatial_autocorr)
+  - h5py=3.*               # read the 10x filtered_feature_bc_matrix.h5
+  - leidenalg=0.10.*       # scanpy/squidpy graph dep
+  - python-igraph=0.11.*
+  - pip
+  # NOTE: the optional cell2location/RCTD "bake-off" (DECONVOLVE_REF) is a v1.1
+  # follow-up and lives in a SEPARATE heavy env (spatial_visium_ref_env.yml) so
+  # this core env — and CI — stays light.

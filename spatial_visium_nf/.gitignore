@@ -1,0 +1,9 @@
+# spatial_visium_nf — runtime + downloaded/generated artifacts. The synthetic
+# demo data is regenerated on demand by `run_local.sh --demo`, so it is not
+# committed; only assets/ (e.g. the NO_TRUTH sentinel) is tracked under data-like
+# paths.
+data/
+results/
+work/
+.nextflow/
+.nextflow.log*
