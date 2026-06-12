@@ -87,3 +87,7 @@ tcr_analysis/datasets/experimental/samples/
 preleukemia_analysis/data/
 preleukemia_analysis/figures/
 preleukemia_analysis/preleuk_dashboard/plots/
+
+# ---------- Agent-local (Claude Code) ----------
+.claude/
+CLAUDE.md
