@@ -59,6 +59,21 @@ nextflow run main.nf -profile conda \
 (seed-controlled) so a full study runs on a laptop; `--subsample 0` uses all
 reads.
 
+### Containers
+
+Besides `-profile conda`, the pipeline ships `docker` and `singularity`
+profiles. The `Dockerfile` bakes `envs/plant_rnaseq_env.yml` (the full
+short-read toolchain + pydeseq2) into a
+[micromamba](https://hub.docker.com/r/mambaorg/micromamba) image, so the
+container matches the conda profile exactly:
+
+```bash
+docker build -t plant_rnaseq_nf:0.1.0 .        # one-time image build
+nextflow run main.nf -profile docker \         # or: -profile singularity
+    --samplesheet data/demo/samplesheet.csv --genome data/demo/genome.fa \
+    --gtf data/demo/genes.gtf --gmt data/demo/go_sets.gmt
+```
+
 ## Parameters
 
 Override at the Nextflow CLI (`--param value`) or in `nextflow.config`.

@@ -41,6 +41,18 @@ GENCODE v26 basic annotation GTF (used to map Ensembl gene IDs to HGNC
 symbols). To run the same four steps without Nextflow — handy for quick
 iteration or a CI smoke test — use `bash run_local.sh`.
 
+### Containers
+
+Besides `-profile conda`, the pipeline ships `docker` and `singularity`
+profiles. The `Dockerfile` bakes `envs/aml_rnaseq_env.yml` into a
+[micromamba](https://hub.docker.com/r/mambaorg/micromamba) image, so the
+container matches the conda profile exactly:
+
+```bash
+docker build -t aml_rnaseq_nf:0.2.0 .          # one-time image build
+nextflow run main.nf -profile docker           # or: -profile singularity
+```
+
 ## Parameters
 
 Override at the Nextflow CLI (`--param value`) or in `nextflow.config`.

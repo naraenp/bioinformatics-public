@@ -66,6 +66,19 @@ nextflow run main.nf -profile conda \
 
 `--truth ''` disables the planted self-check (real data has no ground truth).
 
+### Containers
+
+Besides `-profile conda`, the pipeline ships `docker` and `singularity`
+profiles. The `Dockerfile` bakes `envs/spatial_visium_env.yml` (the
+scanpy/squidpy/anndata stack) into a
+[micromamba](https://hub.docker.com/r/mambaorg/micromamba) image, so the
+container matches the conda profile exactly:
+
+```bash
+docker build -t spatial_visium_nf:0.1.0 .      # one-time image build
+nextflow run main.nf -profile docker           # or: -profile singularity
+```
+
 ## Parameters
 
 Override at the Nextflow CLI (`--param value`) or in `nextflow.config`.
