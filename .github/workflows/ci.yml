@@ -1,0 +1,51 @@
+name: CI
+
+# Smoke-test each Nextflow pipeline's pytest suite on push / PR to main.
+# Each suite exercises the pure helper logic in the pipeline's bin/ (DE/FDR
+# math, deconvolution, demo-data generation) on tiny synthetic inputs, so it
+# runs in seconds with no data download and no heavy toolchain — the lightest
+# reliable "this actually runs" signal. The full offline DAG lives behind
+# `bash run_local.sh --demo`, which needs the heavy conda env (aligners /
+# scanpy / squidpy) and is out of scope for a fast CI gate.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline-smoke:
+    name: ${{ matrix.pipeline }} pytest
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pipeline: aml_rnaseq_nf
+            env_file: .github/ci-envs/aml_rnaseq_ci.yml
+          - pipeline: plant_rnaseq_nf
+            env_file: .github/ci-envs/plant_rnaseq_ci.yml
+          - pipeline: spatial_visium_nf
+            env_file: .github/ci-envs/spatial_visium_ci.yml
+    defaults:
+      run:
+        shell: bash -el {0}   # login shell so the micromamba env is active
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up micromamba (lightweight, version-pinned CI env)
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: ${{ matrix.env_file }}
+
+      - name: Run pytest smoke suite
+        run: pytest ${{ matrix.pipeline }}/tests/ -q

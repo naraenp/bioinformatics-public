@@ -1,5 +1,8 @@
 # bioinformatics-public
 
+[![CI](https://github.com/naraenp/bioinformatics-public/actions/workflows/ci.yml/badge.svg)](https://github.com/naraenp/bioinformatics-public/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Portfolio of end-to-end bioinformatics projects covering single-cell RNA-seq,
 TCR repertoire analysis, and translational interpretation workflows.
 

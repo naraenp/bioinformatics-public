@@ -1,0 +1,14 @@
+# Lightweight CI environment for aml_rnaseq_nf's pytest smoke suite.
+# This is a deliberate SUBSET of envs/aml_rnaseq_env.yml: the unit tests in
+# tests/test_de.py only import the pure helpers in bin/ (numpy/pandas/scipy),
+# so CI installs just those — version-pinned to match the full env — and skips
+# the heavier pieces (nextflow, plotly) that the smoke tests don't touch.
+name: aml_rnaseq_ci
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=2.3.*
+  - pandas=2.3.*
+  - scipy=1.16.*
+  - pytest=8.4.*
