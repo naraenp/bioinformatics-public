@@ -1,0 +1,39 @@
+// Example process-level nf-test for aml_rnaseq_nf.
+//
+// Exercises NORMALIZE_COUNTS on a tiny, self-contained raw-counts matrix (no
+// recount3 download) and asserts the log2(CPM+1) output is produced and stable.
+// Starting point for an nf-test migration; the pytest suite in test_de.py stays
+// the primary, lightweight CI gate. Run from the pipeline dir:  nf-test test
+nextflow_process {
+
+    name "NORMALIZE_COUNTS"
+    script "main.nf"
+    process "NORMALIZE_COUNTS"
+    profile "local"
+
+    test("log2-CPM normalisation on a tiny counts matrix") {
+        when {
+            process {
+                """
+                // Stage a minimal 3-gene x 2-sample raw counts TSV.
+                def counts = file("\${workDir}/counts_raw.tsv")
+                counts.text = '''gene\\ts1\\ts2
+GENE_A\\t1000\\t1200
+GENE_B\\t0\\t0
+GENE_C\\t5000\\t4800
+'''
+                input[0] = counts
+                """
+            }
+        }
+        then {
+            assert process.success
+            // The normalised matrix is emitted and non-empty.
+            with(process.out.lcpm) {
+                assert size() == 1
+                assert path(get(0)).exists()
+                assert path(get(0)).text.contains("GENE_A")
+            }
+        }
+    }
+}
