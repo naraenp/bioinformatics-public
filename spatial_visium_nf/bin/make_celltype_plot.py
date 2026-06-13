@@ -3,9 +3,9 @@
 
 Renders the spots in array space with a dropdown that switches between the
 dominant cell type per spot (categorical) and each cell type's per-spot
-proportion (continuous mauve map) — the spatial-omics analogue of the plant
+proportion (continuous marine map) — the spatial-omics analogue of the plant
 pipeline's heatmap, and a preview of the Part B viewer. Styled in the naraen.net
-"Phalaena Automata" mauve palette and emitted as a self-contained, iframe-ready
+"Aequorea" abyssal-marine palette and emitted as a self-contained, iframe-ready
 HTML.
 """
 from __future__ import annotations
@@ -16,12 +16,12 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
-# Phalaena Automata palette (see naraen.net / plant_rnaseq_nf make_heatmap.py).
-PAL = {"bg": "#1D171A", "grid": "#392D34", "text": "#D7C9D0",
-       "low": "#1D171A", "high": "#C2ADB8"}
-PROP_SCALE = [[0.0, "#1D171A"], [0.35, "#5B4752"], [0.7, "#967386"], [1.0, "#EAE1E5"]]
-# Categorical colours for dominant-type view (mauve-family, distinguishable).
-CAT = ["#C2ADB8", "#967386", "#7D9B8E", "#B8946F", "#8F8AB0", "#A0707F", "#6E8FA8"]
+# Aequorea palette (see naraen.net / plant_rnaseq_nf make_heatmap.py).
+PAL = {"bg": "#0A141A", "grid": "#163239", "text": "#BBD7DC",
+       "low": "#0A141A", "high": "#4BDDE6"}
+PROP_SCALE = [[0.0, "#0A141A"], [0.35, "#294E57"], [0.7, "#8CB6BE"], [1.0, "#DBEBEE"]]
+# Categorical colours for dominant-type view (cool marine family, distinguishable).
+CAT = ["#4BDDE6", "#8CB6BE", "#5FC9B0", "#7FA8C4", "#6E9BD8", "#56858F", "#9FD4DC"]
 
 
 def parse_args() -> argparse.Namespace:

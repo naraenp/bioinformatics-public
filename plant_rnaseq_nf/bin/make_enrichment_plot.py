@@ -6,7 +6,7 @@ over-represented among the genes separating the tolerant and susceptible lines,
 ranked by significance and coloured by fold enrichment. Hover shows the
 overlapping genes.
 
-Styled in the naraen.net "Phalaena Automata" mauve palette; with --png (and
+Styled in the naraen.net "Aequorea" abyssal-marine palette; with --png (and
 kaleido) it also writes a static image.
 """
 from __future__ import annotations
@@ -20,12 +20,12 @@ import plotly.graph_objects as go
 
 
 PAL = {
-    "bg":    "#1D171A",  # coffee-bean
-    "grid":  "#392D34",  # shadow-grey
-    "text":  "#D7C9D0",  # pale-slate
+    "bg":    "#0A141A",  # abyss
+    "grid":  "#163239",  # fathom
+    "text":  "#BBD7DC",  # haze
 }
-# Low-to-high fold-enrichment ramp across the mauve palette.
-COLORSCALE = [[0.0, "#5B4752"], [0.5, "#967386"], [1.0, "#C2ADB8"]]
+# Low-to-high fold-enrichment ramp across the Aequorea marine palette to glow.
+COLORSCALE = [[0.0, "#294E57"], [0.5, "#2F9FB0"], [1.0, "#4BDDE6"]]
 
 
 def parse_args() -> argparse.Namespace:

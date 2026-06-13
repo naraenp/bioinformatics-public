@@ -6,7 +6,7 @@ table, picks the strongest DE genes, row-z-scores them, orders samples by
 genotype, and renders an interactive Plotly heatmap. Genes are ordered by
 hierarchical clustering when SciPy is available, otherwise by log2 fold change.
 
-Styled in the naraen.net "Phalaena Automata" mauve palette so it sits natively
+Styled in the naraen.net "Aequorea" abyssal-marine palette so it sits natively
 in the portfolio. With --png (and kaleido) it also writes a static image.
 """
 from __future__ import annotations
@@ -19,19 +19,20 @@ import pandas as pd
 import plotly.graph_objects as go
 
 
-# Phalaena Automata palette (see naraen.net / make_volcano.py).
+# Aequorea palette (see naraen.net / make_volcano.py): abyssal marine + glow.
 PAL = {
-    "bg":     "#1D171A",  # coffee-bean
-    "grid":   "#392D34",  # shadow-grey
-    "low":    "#967386",  # dusty-mauve  (down in tolerant)
-    "mid":    "#1D171A",  # coffee-bean  (z = 0)
-    "high":   "#C2ADB8",  # lilac-ash    (up in tolerant)
-    "text":   "#D7C9D0",  # pale-slate
+    "bg":     "#0A141A",  # abyss
+    "grid":   "#163239",  # fathom
+    "low":    "#4E7C86",  # muted teal   (down in tolerant)
+    "mid":    "#0A141A",  # abyss        (z = 0)
+    "high":   "#2F9FB0",  # teal         (up in tolerant)
+    "text":   "#BBD7DC",  # haze
 }
-# Diverging, zero-centred colourscale built from the palette.
+# Diverging, zero-centred colourscale: soft mist on the negative arm sinking to
+# the abyssal centre, climbing to a bioluminescent glow on the positive arm.
 COLORSCALE = [
-    [0.0, "#5B4752"], [0.25, PAL["low"]], [0.5, PAL["mid"]],
-    [0.75, PAL["high"]], [1.0, "#EAE1E5"],
+    [0.0, "#8CB6BE"], [0.25, PAL["low"]], [0.5, PAL["mid"]],
+    [0.75, PAL["high"]], [1.0, "#4BDDE6"],
 ]
 
 

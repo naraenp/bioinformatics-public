@@ -3,8 +3,8 @@
 
 Takes the Moran's I ranking and the spatial expression matrix and renders a
 dropdown of the top spatially variable genes; selecting a gene shows its
-log-normalised expression across the spots in array space. Mauve "Phalaena
-Automata" palette; self-contained, iframe-ready HTML.
+log-normalised expression across the spots in array space. Marine "Aequorea"
+palette; self-contained, iframe-ready HTML.
 
 Input:  svg.tsv + spatial_norm.h5ad (layers['lognorm'], obsm['spatial'])
 Output: spatial_svg.html
@@ -18,8 +18,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-PAL = {"bg": "#1D171A", "grid": "#392D34", "text": "#D7C9D0"}
-EXPR_SCALE = [[0.0, "#1D171A"], [0.35, "#5B4752"], [0.7, "#967386"], [1.0, "#EAE1E5"]]
+PAL = {"bg": "#0A141A", "grid": "#163239", "text": "#BBD7DC"}  # Aequorea: abyss / fathom / haze
+EXPR_SCALE = [[0.0, "#0A141A"], [0.35, "#294E57"], [0.7, "#4BDDE6"], [1.0, "#DBEBEE"]]
 
 
 def parse_args() -> argparse.Namespace:

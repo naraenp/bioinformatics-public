@@ -6,7 +6,7 @@ and |log2FC| thresholds. A curated set of canonical AML marker genes is
 annotated by name so the plot reads as a quick sanity check.
 
 With --png and kaleido installed, also writes a static PNG (used for the
-portfolio thumbnail). Styled in the naraen.net "Phalaena Automata" mauve
+portfolio thumbnail). Styled in the naraen.net "Aequorea" abyssal-marine
 palette on a dark ground.
 """
 from __future__ import annotations
@@ -26,16 +26,16 @@ AML_SIGNATURE = [
 ]
 
 
-# Phalaena Automata palette (see naraen.net).
+# Aequorea palette (see naraen.net): abyssal marine ramp + bioluminescent glow.
 PAL = {
-    "bg":        "#1D171A",  # coffee-bean
-    "grid":      "#392D34",  # shadow-grey
-    "ns":        "#5B4752",  # mauve-shadow
-    "down":      "#967386",  # dusty-mauve (accent)
-    "up":        "#C2ADB8",  # lilac-ash
-    "marker":    "#EAE1E5",  # alabaster (signature outline + labels)
-    "text":      "#D7C9D0",  # pale-slate
-    "thresh":    "#5B4752",
+    "bg":        "#0A141A",  # abyss
+    "grid":      "#163239",  # fathom
+    "ns":        "#294E57",  # current (muted)
+    "down":      "#8CB6BE",  # mist (down in AML)
+    "up":        "#4BDDE6",  # glow (up in AML, the accent)
+    "marker":    "#EDF4F6",  # sail (signature outline + labels)
+    "text":      "#BBD7DC",  # haze
+    "thresh":    "#294E57",
 }
 
 
