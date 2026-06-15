@@ -1,0 +1,18 @@
+# Lightweight CI environment for variant_calling_nf's pytest smoke suite.
+# This is a deliberate SUBSET of envs/variant_calling_env.yml: the unit tests in
+# tests/test_pipeline.py exercise the pure helpers in bin/ (variant typing,
+# Ts/Tv, GT-dosage parsing, GTF interval classification, VCF parsing, the
+# planted-variant self-check, and demo-data generation) and only need
+# numpy/pandas/scipy/plotly. The heavy alignment + GATK toolchain (bwa,
+# samtools, gatk4, bcftools, fastp, seqtk) is exercised by run_local.sh --demo,
+# not by the unit suite, so CI omits it to stay fast.
+name: variant_calling_ci
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=2.*
+  - pandas=2.*
+  - scipy=1.*
+  - plotly=6.*
+  - pytest=8.*

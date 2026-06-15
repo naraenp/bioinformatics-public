@@ -1,0 +1,24 @@
+name: variant_calling_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # --- workflow + core scientific stack (kept in step with plant_rnaseq_env) ---
+  - python=3.11
+  - numpy=2.*
+  - pandas=2.*
+  - scipy=1.*
+  - plotly=6.*
+  - python-kaleido=0.2.*      # static PNG/SVG export for the portfolio assets
+  - nextflow=24.10.*
+  - pytest=8.*
+  # --- short-read DNA alignment toolchain ---
+  - bwa=0.7.*                 # short-read DNA aligner (BWA-MEM)
+  - samtools=1.*              # sort / index / faidx
+  - seqtk=1.4.*               # deterministic read subsampling
+  - fastp=0.23.*              # adapter / quality trimming
+  - fastqc=0.12.*             # raw + trimmed QC reports
+  - sra-tools=3.*             # prefetch / fasterq-dump for the real GIAB fetch
+  # --- variant calling + manipulation (GATK germline best practices) ---
+  - gatk4=4.5.*               # MarkDuplicates, HaplotypeCaller, GenotypeGVCFs, VariantFiltration
+  - bcftools=1.*              # VCF normalization / intersection (truth benchmarking)

@@ -35,6 +35,8 @@ jobs:
             env_file: .github/ci-envs/plant_rnaseq_ci.yml
           - pipeline: spatial_visium_nf
             env_file: .github/ci-envs/spatial_visium_ci.yml
+          - pipeline: variant_calling_nf
+            env_file: .github/ci-envs/variant_calling_ci.yml
     defaults:
       run:
         shell: bash -el {0}   # login shell so the micromamba env is active
