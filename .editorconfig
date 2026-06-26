@@ -1,0 +1,30 @@
+# EditorConfig (https://editorconfig.org) — codifies the whitespace conventions
+# already used across this portfolio so editors apply them automatically. This
+# is documentation, not reformatting: it matches the existing files, it does not
+# change them.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Python, Nextflow DSL2, and R all use 4-space indentation here.
+[*.{py,nf,config,R,r}]
+indent_style = space
+indent_size = 4
+
+# YAML (conda envs, CI workflow) uses 2-space indentation.
+[*.{yml,yaml}]
+indent_size = 2
+
+# Shell scripts use tabs (heredoc-friendly), matching fetch_real_data.sh.
+[*.sh]
+indent_style = tab
+
+# Markdown: keep trailing whitespace, which can be a hard line break.
+[*.md]
+trim_trailing_whitespace = false

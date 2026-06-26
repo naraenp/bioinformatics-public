@@ -61,3 +61,26 @@ def test_cpm_filter_drops_low_expression_genes() -> None:
     kept = load_counts.cpm_filter(counts, min_cpm=1.0, min_frac=0.25)
     assert "SILENT" not in kept.index
     assert {"EXPRESSED_A", "EXPRESSED_B"}.issubset(kept.index)
+
+
+def test_volcano_classify_respects_fdr_and_lfc_thresholds() -> None:
+    # make_volcano imports plotly at module top; the lean CI env omits it, so
+    # skip there (the classify logic itself is pure pandas/numpy).
+    pytest.importorskip("plotly")
+    make_volcano = _load("make_volcano")
+    df = pd.DataFrame({
+        "gene":   ["UP", "DOWN", "NS_PVAL", "NS_LFC", "EDGE_UP", "EDGE_DOWN"],
+        "padj":   [0.001, 0.001, 0.50, 0.001, 0.001, 0.001],
+        "log2FC": [2.0, -2.0, 3.0, 0.5, 1.0, -1.0],
+    })
+    status = make_volcano.classify(df, fdr=0.05, lfc=1.0)
+    by_gene = dict(zip(df["gene"], status))
+    assert by_gene["UP"] == "Up in AML"
+    assert by_gene["DOWN"] == "Down in AML"
+    # Significant fold change but padj above the FDR cutoff -> not significant.
+    assert by_gene["NS_PVAL"] == "Not significant"
+    # Significant padj but |log2FC| below the threshold -> not significant.
+    assert by_gene["NS_LFC"] == "Not significant"
+    # Boundary: |log2FC| == lfc is inclusive (the code uses >= / <=).
+    assert by_gene["EDGE_UP"] == "Up in AML"
+    assert by_gene["EDGE_DOWN"] == "Down in AML"

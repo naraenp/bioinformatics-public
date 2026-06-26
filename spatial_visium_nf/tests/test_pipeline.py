@@ -110,6 +110,28 @@ def test_morans_i_high_on_gradient_low_on_noise():
     assert abs(I[1]) < 0.3                             # noise: near zero
 
 
+def test_permutation_pvals_bounded_and_separates_signal():
+    pytest.importorskip("scipy")
+    import numpy as np
+    svg = load("svg_moran")
+    coords = np.array([[x, y] for x in range(8) for y in range(8)], float)
+    W = svg.knn_weights(coords, k=4)
+    rng = np.random.default_rng(2)
+    V = np.column_stack([coords[:, 0], rng.normal(size=coords.shape[0])])
+    I = svg.morans_i(V, W)
+    n_perm = 200
+    p = svg.permutation_pvals(V, W, I, n_perm=n_perm, seed=0)
+    # One-sided permutation p-values live in (0, 1]; the smallest attainable is
+    # 1/(n_perm+1) because the observed statistic is counted in the numerator.
+    assert np.all(p > 0) and np.all(p <= 1.0)
+    assert p.min() >= 1.0 / (n_perm + 1) - 1e-12
+    # The smooth gradient is autocorrelated, the noise gene is not.
+    assert p[0] < p[1]
+    assert p[0] == pytest.approx(1.0 / (n_perm + 1))  # gradient hits the floor
+    # Seeded, so the test is deterministic across runs.
+    assert np.array_equal(p, svg.permutation_pvals(V, W, I, n_perm=n_perm, seed=0))
+
+
 # ---- build_signature.mean_by_label -----------------------------------------
 
 def test_mean_by_label():
