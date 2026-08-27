@@ -1,9 +1,9 @@
 #Preleukemia scRNAseq Sample Analysis (Part 1 in R)
 #Naraen Palanikumar
-#This is part 1 of the analysis and dashboard completed of publicly available scRNAseq/gene signature/reference atlas data from this paper (https://doi.org/10.1016/j.xgen.2023.100426) and AML clinical data from NCI.
+#This is part 1 of the analysis and dashboard completed of publicly available scRNAseq/gene signature/reference atlas data from Isobe et al., Cell Genomics 2023 (https://doi.org/10.1016/j.xgen.2023.100426), plus TCGA-LAML clinical data from NCI via cBioPortal.
 
 # --- Data Summary ---
-#Raw: Contains scRNAseq data from 38 samples as well as a metadata file
+#Raw: Contains scRNAseq data from 38 mouse bone-marrow HSPC samples (eight preleukemic mutation models) as well as a metadata file
 #Reference: Contains reference file for cell annotation
 #Seurat_Inter: Contains pre-normalized data to integrate
 #R_Final: Contains the final integrated seurat file for further analysis

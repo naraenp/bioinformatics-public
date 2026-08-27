@@ -9,10 +9,10 @@ TCR repertoire analysis, and translational interpretation workflows.
 ## What's inside
 
 This repository demonstrates production-style scientific computation across six
-independent subprojects: two analysis workflows (TCR repertoire, AML scRNA-seq)
-and four Nextflow pipelines (two bulk RNA-seq differential expression, counts-in
-and reads-in; one spatial transcriptomics deconvolution; and one germline DNA
-short-variant caller):
+independent subprojects: two analysis workflows (TCR repertoire, preleukemia
+scRNA-seq) and four Nextflow pipelines (two bulk RNA-seq differential
+expression, counts-in and reads-in; one spatial transcriptomics deconvolution;
+and one germline DNA short-variant caller):
 
 - Real biological data handled with reproducible, version-pinned environments.
 - Robust analysis methods (Seurat integration, anchor-based label transfer,
@@ -79,14 +79,15 @@ nomenclature to IMGT format and cross-references experimental repertoires
 against curated IEDB and VDJdb reference sets. Environment definitions live in
 `tcr_analysis/envs/`.
 
-### AML scRNA-seq analysis
+### Preleukemia scRNA-seq analysis
 
-Reproducible scRNA-seq pipeline on 38 public AML patient samples, performing
-QC, anchor-based integration, and reference-guided cell-type annotation to
-characterize pre-leukemic populations. Extended with pseudotime, fate mapping,
-and survival analysis of PLPS/Stem11 signatures against NCI clinical data, and
-deployed via an interactive R Shiny dashboard. Environment definitions live in
-`preleukemia_analysis/envs/`.
+Reproducible scRNA-seq analysis of 38 mouse bone-marrow HSPC samples spanning
+eight preleukemic mutation models (Isobe et al., *Cell Genomics* 2023),
+performing QC, anchor-based integration, and reference-guided cell-type
+annotation to characterize preleukemic populations. Extended with pseudotime,
+fate mapping, and a survival analysis of the paper's PLPS and Stem11 signatures
+in 163 TCGA-LAML patients, and deployed via an interactive R Shiny dashboard.
+Environment definitions live in `preleukemia_analysis/envs/`.
 
 ### AML bulk RNA-seq DE pipeline (Nextflow)
 

@@ -1,12 +1,14 @@
-# AML scRNA-seq analysis
+# Preleukemia scRNA-seq analysis
 
-Reproducible scRNA-seq pipeline on **38 public AML patient samples**, performing
-QC, anchor-based integration, and reference-guided cell-type annotation to
-characterize pre-leukemic populations. Extended with pseudotime, fate mapping,
-and survival analysis of PLPS/Stem11 signatures against NCI clinical data, and
-deployed as an interactive R Shiny dashboard. Source data is drawn from [Zeng
-et al., *Cell Genomics* (2023)](https://doi.org/10.1016/j.xgen.2023.100426) and
-AML clinical data from NCI.
+Reproducible scRNA-seq analysis of **38 mouse bone-marrow HSPC samples**
+spanning eight preleukemic mutation models, performing QC, anchor-based
+integration, and reference-guided cell-type annotation to characterize
+preleukemic populations. Extended with pseudotime, fate mapping, and a survival
+analysis of the paper's PLPS and Stem11 signatures in the TCGA-LAML cohort, and
+deployed as an interactive R Shiny dashboard. Source data is drawn from [Isobe
+et al., *Cell Genomics* (2023)](https://doi.org/10.1016/j.xgen.2023.100426);
+the human survival arm uses 163 TCGA-LAML patients with both expression and
+overall-survival data (NCI clinical data via cBioPortal).
 
 ## Why it matters
 
