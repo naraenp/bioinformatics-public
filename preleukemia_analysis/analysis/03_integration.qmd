@@ -1,0 +1,154 @@
+---
+title: "03 - Normalization, integration, and clustering"
+---
+
+This stage combines the 38 QC'd samples into one object, corrects for sample-level batch effects, and clusters the cells. The samples span two sequencing platforms, several library preparations, and eight mutation models, so without correction cells would partly group by sample rather than by cell type.
+
+Counts are log-normalized (`NormalizeData`: counts per 10,000, then log1p). This normalization only affects embedding, clustering, and annotation; differential expression in stage 05 uses raw counts.
+
+Batch correction uses Harmony (Korsunsky et al. 2019) on 50 principal components with sample as the batch variable. Harmony is fast at this cell count, needs no arbitrary reference sample (the original pipeline anchored on sample 1), and is well ranked in the Luecken et al. 2022 benchmark for data like this, where all samples contain the same cell types. Correcting on sample rather than condition means WT versus mutant differences are not removed.
+
+Over-correction is checked by keeping the uncorrected UMAP next to the corrected one and by computing, for each cluster, the Shannon entropy of its sample composition scaled to [0, 1], where 1 means the samples are evenly mixed.
+
+Clustering uses Louvain on the Harmony embedding (30 dimensions, resolution 0.5). Clusters are used for annotation checks and plots only; the statistics in stage 05 use reference-based cell types and sample-level replicates, so results do not depend on the resolution.
+
+```{r}
+#| label: setup
+#| message: false
+
+library(here)
+library(tidyverse)
+library(Seurat)
+options(future.globals.maxSize = 16e9)
+
+qc_dir  <- here("data", "processed", "02_qc")
+int_dir <- here("data", "processed", "03_integration")
+dir.create(int_dir, recursive = TRUE, showWarnings = FALSE)
+
+sample_sheet <- read_csv(here("data", "raw", "sample_metadata.csv"), show_col_types = FALSE)
+```
+
+## Assemble the merged object
+
+Per-sample count matrices are merged directly into one sparse matrix and wrapped in a single-layer Seurat object. Seurat's own `merge()` with per-sample layers exceeded the available 46 GB at this scale, and the layers are not needed because Harmony only uses the PCA embedding. A check confirms that all 38 samples share the same gene names before merging. Sample metadata is joined by GSM.
+
+```{r}
+#| label: merge
+#| message: false
+#| warning: false
+
+# merge with SeuratObject's sparse row-merge; Seurat merge()/JoinLayers() ran out of memory here
+mats <- lapply(seq_len(nrow(sample_sheet)), function(i) {
+  gsm <- sample_sheet$gsm[i]
+  sce <- readRDS(file.path(qc_dir, paste0("qc_", gsm, ".rds")))
+  m <- SingleCellExperiment::counts(sce)
+  rownames(m) <- SingleCellExperiment::rowData(sce)$Symbol
+  colnames(m) <- paste(gsm, colnames(m), sep = "_")
+  list(counts = m[!duplicated(rownames(m)), ], mito = sce$subsets_mito_percent)
+})
+mito_all <- unlist(lapply(mats, `[[`, "mito"))
+mats <- lapply(mats, `[[`, "counts")
+gene_sets <- lapply(mats, rownames)
+stopifnot(all(sapply(gene_sets, identical, gene_sets[[1]])))   # all 38 samples share the same gene names
+
+counts_all <- SeuratObject::RowMergeSparseMatrices(mats[[1]], mats[-1])
+rm(mats); invisible(gc())
+counts_all <- counts_all[Matrix::rowSums(counts_all > 0) >= 10, ]   # drop genes in < 10 cells
+
+seu <- CreateSeuratObject(counts_all, project = "preleuk")
+rm(counts_all); invisible(gc())
+seu$gsm <- sub("_.*$", "", colnames(seu))
+seu$percent_mito <- mito_all
+
+meta_cols <- sample_sheet %>% select(gsm, title, model, condition, sex, age, treatment, platform)
+new_meta <- seu@meta.data %>% as_tibble(rownames = "cell") %>% left_join(meta_cols, by = "gsm")
+seu <- AddMetaData(seu, new_meta %>% select(-cell, -starts_with("nCount"), -starts_with("nFeature"), -orig.ident, -gsm, -percent_mito) %>% as.data.frame() %>% `rownames<-`(new_meta$cell))
+
+stopifnot(n_distinct(seu$gsm) == 38, !any(is.na(seu$condition)))
+cat("Merged object:", ncol(seu), "cells x", nrow(seu), "genes\n")
+```
+
+## Normalize, reduce, integrate
+
+```{r}
+#| label: integrate
+#| message: false
+#| warning: false
+
+set.seed(42)
+seu <- NormalizeData(seu, verbose = FALSE)
+seu <- FindVariableFeatures(seu, nfeatures = 2000, verbose = FALSE)
+seu <- ScaleData(seu, features = VariableFeatures(seu), verbose = FALSE)
+seu <- RunPCA(seu, npcs = 50, verbose = FALSE)
+
+# elbow plot: how many PCs carry structure
+ElbowPlot(seu, ndims = 50)
+
+# called directly rather than through IntegrateLayers, which needs split layers and more memory
+seu <- harmony::RunHarmony(seu, group.by.vars = "gsm", reduction.use = "pca",
+                           reduction.save = "harmony", verbose = FALSE)
+invisible(gc())
+
+seu <- RunUMAP(seu, reduction = "pca",     dims = 1:30, reduction.name = "umap_unint", verbose = FALSE)
+seu <- RunUMAP(seu, reduction = "harmony", dims = 1:30, reduction.name = "umap",       verbose = FALSE)
+seu <- FindNeighbors(seu, reduction = "harmony", dims = 1:30, verbose = FALSE)
+seu <- FindClusters(seu, resolution = 0.5, verbose = FALSE)
+```
+
+## Integration evaluation
+
+Left: before correction, cells separate by sample within shared cell types. Right: after Harmony, samples interleave and the lineage structure is kept.
+
+```{r}
+#| label: eval-umaps
+#| fig-height: 5.5
+#| fig-width: 12
+
+p1 <- DimPlot(seu, reduction = "umap_unint", group.by = "gsm") +
+  NoLegend() + ggtitle("Unintegrated (PCA)")
+p2 <- DimPlot(seu, reduction = "umap", group.by = "gsm") +
+  NoLegend() + ggtitle("Harmony-integrated")
+p1 + p2
+```
+
+```{r}
+#| label: eval-covariates
+#| fig-height: 10
+#| fig-width: 12
+
+(DimPlot(seu, reduction = "umap", group.by = "platform") +
+ DimPlot(seu, reduction = "umap", group.by = "condition")) /
+(DimPlot(seu, reduction = "umap", group.by = "model") +
+ DimPlot(seu, reduction = "umap", group.by = "seurat_clusters", label = TRUE) + NoLegend())
+```
+
+```{r}
+#| label: mixing-entropy
+
+# Shannon entropy of sample composition per cluster, scaled by log(38):
+# 1 = samples evenly mixed, low values = a few samples dominate the cluster
+mixing <- seu@meta.data %>%
+  count(seurat_clusters, gsm) %>%
+  group_by(seurat_clusters) %>%
+  summarise(n_cells = sum(n),
+            entropy = { p <- n / sum(n); -sum(p * log(p)) / log(38) })
+
+knitr::kable(mixing, digits = 3)
+```
+
+Clusters with low mixing entropy are checked in stage 04 against their cell-type label and model of origin. A cluster dominated by a few samples can be a mutant-expanded population rather than an integration failure; the difference is whether the skew follows condition and model or individual libraries.
+
+```{r}
+#| label: save
+
+saveRDS(seu, file.path(int_dir, "seurat_integrated.rds"))
+cat("Saved:", file.path(int_dir, "seurat_integrated.rds"), "-",
+    ncol(seu), "cells,", n_distinct(seu$seurat_clusters), "clusters\n")
+```
+
+## Session info
+
+```{r}
+#| label: session-info
+sessionInfo()
+```

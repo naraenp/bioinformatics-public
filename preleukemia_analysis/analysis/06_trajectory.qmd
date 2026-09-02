@@ -1,0 +1,163 @@
+---
+title: "06 - Pseudotime and fate mapping"
+jupyter: python3
+---
+
+This stage orders cells along differentiation and estimates lineage fate probabilities. Hematopoiesis is a continuum rooted in HSCs, so the integrated data suit trajectory inference.
+
+Pseudotime uses diffusion pseudotime (DPT; Haghverdi et al. 2016), which orders cells by diffusion distance from a root cell and is robust to noise in individual graph edges. The kNN graph is built on the Harmony embedding so batch effects are not read as developmental structure. The root is the HSC-labelled cell with the highest *Hlf* expression, a long-term HSC transcription factor.
+
+RNA velocity is not used because the deposited CellRanger matrices have no spliced and unspliced counts.
+
+Fate probabilities come from CellRank 2 (Weiler et al. 2024). The pseudotime kernel turns the kNN graph into a Markov chain biased along increasing pseudotime, GPCCA groups the chain into macrostates, and each cell's fate probability is its probability of absorption into each terminal state.
+
+All per-cell values here are descriptive. Where WT and mutant are compared, fate probabilities are first averaged per sample, and the comparison is exploratory (n = 38 samples, no covariates).
+
+```{python}
+#| label: setup
+#| message: false
+
+import scanpy as sc
+import numpy as np
+import pandas as pd
+import scipy.io as sio
+import scipy.sparse as sp
+from pathlib import Path
+import matplotlib.pyplot as plt
+
+root = Path("..")  # quarto runs chunks with the working directory set to analysis/
+export = root / "data" / "processed" / "04_annotation" / "py_export"
+out_dir = root / "data" / "processed" / "06_trajectory"
+out_dir.mkdir(parents=True, exist_ok=True)
+import matplotlib as mpl
+mpl.rcParams.update({"figure.dpi": 110, "figure.facecolor": "white"})  # scanpy's set_figure_params needs an IPython function that no longer exists
+```
+
+```{python}
+#| label: build-anndata
+
+counts = sio.mmread(export / "counts.mtx").tocsr().T   # cells x genes
+genes = pd.read_csv(export / "genes.txt", header=None)[0].values
+obs = pd.read_csv(export / "obs.csv", index_col=0)
+harmony = pd.read_csv(export / "harmony.csv", index_col=0)
+umap = pd.read_csv(export / "umap.csv", index_col=0)
+
+import anndata as ad
+adata = ad.AnnData(X=counts.astype(np.float32), obs=obs)
+adata.var_names = genes
+adata.obsm["X_harmony"] = harmony.loc[adata.obs_names].values
+adata.obsm["X_umap"] = umap.loc[adata.obs_names].values
+assert adata.n_obs == obs.shape[0]
+print(adata)
+
+for c in ["celltype", "condition", "model", "gsm"]:
+    adata.obs[c] = adata.obs[c].astype("category")   # scanpy and cellrank expect categorical labels
+
+adata.layers["counts"] = adata.X.copy()
+sc.pp.normalize_total(adata, target_sum=1e4)
+sc.pp.log1p(adata)
+```
+
+## Diffusion pseudotime
+
+```{python}
+#| label: dpt
+
+sc.pp.neighbors(adata, use_rep="X_harmony", n_neighbors=30, random_state=42)
+sc.tl.diffmap(adata, random_state=42)
+
+hsc_mask = adata.obs["celltype"] == "HSCs"
+hlf = adata[:, "Hlf"].X.toarray().ravel()
+root_cell = int(np.argmax(np.where(hsc_mask.values, hlf, -np.inf)))
+adata.uns["iroot"] = root_cell
+print("Root cell:", adata.obs_names[root_cell], "| celltype:",
+      adata.obs["celltype"].iloc[root_cell])
+
+sc.tl.dpt(adata)
+sc.pl.embedding(adata, basis="X_umap", color=["dpt_pseudotime", "celltype"],
+                frameon=False)
+```
+
+Pseudotime must increase from HSCs toward mature lineages. If it does not, the root or the graph is wrong and nothing downstream can be interpreted.
+
+```{python}
+#| label: dpt-sanity
+
+order = (adata.obs.groupby("celltype", observed=True)["dpt_pseudotime"]
+         .median().sort_values())
+print(order.round(3))
+assert order.index[0] == "HSCs", "HSCs are not at the origin of pseudotime"
+```
+
+## CellRank fate probabilities
+
+```{python}
+#| label: cellrank
+#| warning: false
+
+import cellrank as cr
+import re
+
+pk = cr.kernels.PseudotimeKernel(adata, time_key="dpt_pseudotime")
+pk.compute_transition_matrix(threshold_scheme="soft")
+
+g = cr.estimators.GPCCA(pk)
+g.fit(n_states=10, cluster_key="celltype")
+print("Macrostates:", list(g.macrostates.cat.categories))
+
+# GPCCA's stability heuristic also marks the quiescent HSC and progenitor macrostates as
+# terminal. Restricting the sinks to mature lineages made the absorption solve
+# ill-conditioned, so fate is computed against all heuristic sinks here and reported
+# conditional on commitment in the next section.
+g.predict_terminal_states()
+print("Heuristic terminal states:", sorted(set(g.terminal_states.dropna())))
+g.compute_fate_probabilities()
+g.plot_fate_probabilities(same_plot=False, basis="X_umap")
+```
+
+## Condition-level fate bias (sample-aggregated, exploratory)
+
+Fate probabilities are reported conditional on commitment. GPCCA marks the quiescent HSC and progenitor macrostates as absorbing as well as the mature lineages, so each cell's absorption mass on the five mature sinks is renormalized to sum to one, giving the probability of each lineage given that the cell commits. Conditional fates of progenitor cells (HSCs and Immature) are averaged per sample and compared between WT and mutant; each point is one mouse.
+
+```{python}
+#| label: fate-bias
+#| warning: false
+
+fate = pd.DataFrame(
+    g.fate_probabilities.X,
+    columns=list(g.fate_probabilities.names),
+    index=adata.obs_names,
+)
+# sum duplicate macrostates of one lineage (e.g. Megakry_1 + Megakry_2);
+# absorption probability is additive over disjoint sinks
+fate = fate.T.groupby(lambda c: re.sub(r"_\d+$", "", c)).sum().T
+progenitor_labels = {"HSCs", "Immature", "Middle", "MEP", "Early_Ery"}
+mature = [c for c in fate.columns if c.strip() not in progenitor_labels]
+print("All sinks:", list(fate.columns), "| mature lineages used for conditional fate:", mature)
+fate = fate[mature].div(fate[mature].sum(axis=1), axis=0)     # condition on commitment
+fate = fate.dropna()                                         # cells with zero mass on mature sinks
+print("Conditional fate rows:", len(fate), "| row sums ~1:", np.allclose(fate.sum(axis=1), 1, atol=1e-3))
+prog = adata.obs["celltype"].isin(["HSCs", "Immature"]).values
+prog_cells = adata.obs_names[prog].intersection(fate.index)
+df = pd.concat([fate.loc[prog_cells], adata.obs.loc[prog_cells, ["gsm", "condition", "model"]]], axis=1)
+per_sample = df.groupby(["gsm", "condition", "model"], observed=True).mean().reset_index()
+per_sample.to_csv(out_dir / "fate_bias_per_sample.csv", index=False)
+
+lineages = list(fate.columns)
+fig, axes = plt.subplots(1, len(lineages), figsize=(3 * len(lineages), 3.5), sharey=False)
+for ax, lin in zip(np.atleast_1d(axes), lineages):
+    for j, cond in enumerate(["WT", "Mutant"]):
+        vals = per_sample.loc[per_sample["condition"] == cond, lin]
+        ax.scatter(np.random.default_rng(0).normal(j, 0.06, len(vals)), vals, s=14, alpha=0.8)
+    ax.set_xticks([0, 1], ["WT", "Mut"]); ax.set_title(lin, fontsize=9)
+fig.suptitle("Progenitor fate probability per sample (each point = one mouse)")
+plt.tight_layout(); plt.show()
+```
+
+```{python}
+#| label: save
+
+adata.obs[["gsm", "condition", "model", "celltype", "dpt_pseudotime"]].join(fate, how="left").to_csv(
+    out_dir / "trajectory_per_cell.csv")
+print("saved:", out_dir / "trajectory_per_cell.csv")
+```

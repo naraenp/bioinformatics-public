@@ -1,17 +1,14 @@
 # spatial_visium_nf
 
-A **Nextflow DSL2** pipeline that takes a **10x Visium** spatial transcriptomics
-section plus a **matched scRNA-seq reference** and maps cell types back into
-tissue space: per-spot **cell-type deconvolution** (NNLS against a reference
-signature matrix) and **spatially variable genes** (Moran's I), rendered as
-interactive Plotly figures. It is the **spatial companion** to the bulk pipelines
-[`aml_rnaseq_nf`](../aml_rnaseq_nf) (counts-in) and
-[`plant_rnaseq_nf`](../plant_rnaseq_nf) (reads-in): this one is
-*tissue-in → cell-types-in-space-out*.
+A **Nextflow DSL2** pipeline that maps cell types back into tissue space. It takes
+a **10x Visium** section plus a **scRNA-seq reference** and produces per-spot
+**cell-type deconvolution** (NNLS) and **spatially variable genes** (Moran's I) as
+interactive Plotly figures. It is the spatial companion to
+[`aml_rnaseq_nf`](../aml_rnaseq_nf).
 
-The default real target is **10x Visium Human Breast Cancer** + the **Wu et al.
-2021** breast-cancer scRNA-seq atlas (GSE176078), but nothing is breast-specific:
-point it at any Visium sample + annotated reference with a cell-type column.
+The default target is **10x Visium Human Breast Cancer** with the **Wu et al. 2021**
+atlas (GSE176078) as the reference, but nothing is breast-specific: point it at any
+Visium sample and annotated reference.
 
 ## Stages
 
@@ -29,9 +26,9 @@ point it at any Visium sample + annotated reference with a cell-type column.
 
 All outputs land in `results/` via Nextflow `publishDir 'copy'`.
 
-> **Optional v1.1 follow-up — `DECONVOLVE_REF`:** a cell2location / RCTD
-> "method bake-off" against the NNLS default, kept in a *separate heavy env* so
-> the core pipeline and CI stay light. Not in v1.
+> **Planned:** a `DECONVOLVE_REF` stage comparing NNLS against cell2location and
+> RCTD. It is kept out for now because those need a much heavier environment than
+> the rest of the pipeline.
 
 ## Run
 
@@ -49,8 +46,8 @@ nextflow run main.nf -profile conda
 `run_local.sh --demo` synthesizes a toy Visium grid + scRNA reference whose
 per-spot cell-type proportions are **planted** and spatially structured, runs the
 whole DAG, and **self-checks** that the NNLS deconvolution recovers the planted
-proportions within tolerance — the spatial analogue of the planted-DE check in
-`plant_rnaseq_nf` / `aml_rnaseq_nf`, and the CI gate.
+proportions within tolerance. This is the CI gate: if a change to the method stops
+it recovering the planted values, the build fails.
 
 For a **real run**, fetch the breast-cancer Visium section + Wu et al. atlas once:
 
@@ -100,31 +97,22 @@ Override at the Nextflow CLI (`--param value`) or in `nextflow.config`.
 
 ## Methods
 
-- **Load.** `scanpy` reads the 10x Visium filtered matrix + tissue positions
-  (in-tissue spots, array coordinates in `obsm['spatial']`) and a CellRanger-style
-  reference bundle + metadata carrying the cell-type labels — an identical code
-  path on toy and real data.
-- **QC.** Per-spot total counts, genes/spot and mitochondrial fraction
-  (name-prefix), with threshold filtering and a JSON summary.
-- **Normalize.** Library-size `normalize_total` + `log1p`; highly variable genes
-  selected on the reference and intersected with the spatial genes, putting both
-  matrices in one shared, comparable feature space.
-- **Deconvolution (default).** Per spot, **non-negative least squares**
-  (`scipy.optimize.nnls`) of its linear-normalized expression onto the
-  per-cell-type reference signature matrix, normalized to proportions. Each gene
-  is first divided by its mean signature level (inverse-mean weighting) so the fit
-  is not dominated by a few very high-expression genes — without it, plain NNLS on
-  real cross-platform data collapses onto one or two loud immune signatures. Still
-  one deterministic factor per gene: transparent and dependency-light, the on-brand
-  analogue of the hand-rolled DE/ORA in the bulk pipelines.
-- **Spatially variable genes.** Moran's I on a symmetric kNN spot graph, computed
-  from first principles and vectorized across genes, with a seeded permutation
-  test. (Squidpy's `spatial_autocorr` is the production equivalent; the hand-rolled
-  version keeps the maths legible and CI light.)
-- **Visualization.** Two interactive Plotly figures in the naraen.net "Phalaena
-  Automata" mauve palette: a spot map (dominant cell type, or any cell type's
-  proportion) and the spatial expression of the top spatially variable genes —
-  both iframe-ready for the portfolio.
+- **Load.** `scanpy` reads the Visium matrix + tissue positions and a
+  CellRanger-style reference bundle with cell-type labels. Toy and real data take
+  the same code path.
+- **QC.** Per-spot counts, genes/spot and mitochondrial fraction, with threshold
+  filtering and a JSON summary.
+- **Normalize.** `normalize_total` + `log1p`; highly variable genes are chosen on
+  the reference and intersected with the spatial genes, putting both matrices in a
+  shared feature space.
+- **Deconvolution.** Non-negative least squares of each spot against the cell-type
+  signature matrix, normalized to proportions. Genes are weighted by the inverse of
+  their mean signature level, without which a few very high-expression genes
+  dominate the fit. See `bin/deconvolve_nnls.py` for why.
+- **Spatially variable genes.** Moran's I on a kNN spot graph with a seeded
+  permutation test. Squidpy's `spatial_autocorr` is the production equivalent.
+- **Visualization.** Two interactive Plotly figures: a spot map of cell-type
+  proportions, and the spatial expression of the top spatially variable genes.
 
 See [`docs/REPORT.md`](docs/REPORT.md) for an end-to-end run.
 
@@ -167,11 +155,10 @@ spatial_visium_nf/
 
 ## Notes / next steps
 
-- **`DECONVOLVE_REF` (v1.1):** cell2location / RCTD comparison in a separate heavy
-  env — the "method bake-off" a standards-focused unit values.
-- **Viewer (Part B):** an R Shiny app (SpatialExperiment) over the exported
-  outputs — pick a cell type → spatial proportion map; pick a gene → spatial
-  expression — deployed to shinyapps.io.
-- The reference need not be patient-matched to the Visium section (it is a
-  cell-type *reference*); the cross-platform shift this introduces is exactly what
-  RCTD / cell2location correct for, motivating the bake-off.
+- **Compare against a probabilistic method.** NNLS gives a point estimate with no
+  uncertainty. cell2location and RCTD model the counts directly and return a
+  posterior, which is the principled way to handle the next point.
+- **The reference is not patient-matched** to this section; it is a cell-type
+  reference, so a cross-platform shift remains in the absolute proportions.
+- **A Shiny viewer** over the exported outputs: pick a cell type for its spatial
+  proportion map, or a gene for its spatial expression.

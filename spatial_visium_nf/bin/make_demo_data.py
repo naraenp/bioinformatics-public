@@ -1,24 +1,16 @@
 #!/usr/bin/env python3
-"""Generate a tiny self-contained spatial dataset that exercises the whole
-pipeline — with a *known, planted* ground truth the deconvolution must recover.
+"""Generate a tiny spatial dataset with a *known, planted* ground truth.
 
-The real pipeline runs on a 10x Visium breast-cancer section plus the Wu et al.
-2021 scRNA-seq atlas as the reference (see fetch_real_data.sh), which is ~0.6 GB
-and needs the full scanpy/squidpy stack. For CI, local iteration, and the smoke
-test we instead synthesize:
+The real inputs (a 10x Visium section plus the Wu et al. 2021 atlas) are ~0.6 GB,
+so CI and local iteration use a synthetic stand-in instead:
 
-  * a scRNA-seq REFERENCE of K cell types, each with its own marker genes, as a
-    10x-style sparse MTX bundle + a metadata.csv carrying the cell-type labels;
-  * a Visium SPATIAL sample laid out on a grid, where each spot is a *known*
-    mixture of the K cell types — the proportions are planted with spatial
-    structure (each cell type dominates a region), so (a) the NNLS deconvolution
-    must recover them within tolerance and (b) each type's marker genes are
-    spatially autocorrelated and must surface as spatially variable (Moran's I).
+  * a scRNA-seq REFERENCE of K cell types, each with its own marker genes;
+  * a Visium SPATIAL grid where each spot is a known mixture of those types, with
+    each type dominating a region.
 
-The demo writes the SAME on-disk formats as the real inputs, so load_spatial.py
-and load_reference.py run an identical code path on toy and real data. The
-planted proportions are the spatial analogue of the planted DE genes in
-plant_rnaseq_nf / aml_rnaseq_nf.
+Because the proportions are planted, the deconvolution must recover them within
+tolerance and the marker genes must surface as spatially variable. The demo writes
+the same on-disk formats as the real inputs, so the loaders take one code path.
 
 Writes into --outdir:
     reference/matrix.mtx.gz, barcodes.tsv.gz, features.tsv.gz, metadata.csv

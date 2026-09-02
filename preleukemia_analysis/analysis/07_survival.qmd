@@ -1,0 +1,145 @@
+---
+title: "07 - Signature scores and survival in TCGA-LAML"
+jupyter: python3
+---
+
+This stage asks whether the paper's preleukemic signatures, PLPS (216 genes) and Stem11 (11 genes), are associated with overall survival in human AML. Data are TCGA-LAML RNA-seq (RSEM values from cBioPortal) with clinical follow-up.
+
+Each patient is scored as the mean z-score of the signature genes across patients. Genes missing from the expression matrix are reported rather than silently dropped.
+
+The primary test is a Cox proportional-hazards model on the continuous score, adjusted for age at diagnosis and reported as the hazard ratio per one standard deviation of score. Age is the strongest prognostic factor in AML and a likely confounder of any expression signature. The original analysis split patients at the median and ran a log-rank test; the median split discards information and the comparison was unadjusted.
+
+Kaplan-Meier curves at the median split are kept for display. The proportional-hazards assumption is checked with Schoenfeld residuals.
+
+```{python}
+#| label: setup
+#| message: false
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import matplotlib.pyplot as plt
+from lifelines import CoxPHFitter, KaplanMeierFitter
+from lifelines.statistics import logrank_test, proportional_hazard_test
+
+root = Path("..")
+ext = root / "data" / "external"
+out_dir = root / "data" / "processed" / "07_survival"
+out_dir.mkdir(parents=True, exist_ok=True)
+```
+
+## Assemble expression, clinical, and signatures
+
+```{python}
+#| label: load
+
+expr = pd.read_csv(ext / "laml_tcga_expression.tsv", sep="\t")
+expr = (expr.drop(columns=["Entrez_Gene_Id"])
+            .dropna(subset=["Hugo_Symbol"])
+            .drop_duplicates(subset="Hugo_Symbol")
+            .set_index("Hugo_Symbol"))
+expr = np.log2(expr + 1)                     # RSEM -> log2(x+1)
+
+clin = pd.read_csv(ext / "laml_tcga_clinical.tsv", sep="\t", comment="#")
+clin = clin[["PATIENT_ID", "AGE", "OS_STATUS", "OS_MONTHS"]].dropna()
+clin["event"] = clin["OS_STATUS"].str.startswith("1").astype(int)
+clin["time"] = pd.to_numeric(clin["OS_MONTHS"], errors="coerce")
+clin = clin.dropna(subset=["time"]).query("time > 0")
+
+# expression columns are sample IDs (TCGA-AB-XXXX-03); map to patient IDs
+sample_to_patient = {c: c[:12] for c in expr.columns}
+expr.columns = [sample_to_patient[c] for c in expr.columns]
+expr = expr.loc[:, ~expr.columns.duplicated()]
+
+cohort = clin[clin["PATIENT_ID"].isin(expr.columns)].copy()
+print(f"Patients with expression + survival: {len(cohort)}")
+
+signatures = {
+    "PLPS":   pd.read_csv(ext / "plps.csv")["Gene"].str.strip().tolist(),
+    "Stem11": pd.read_csv(ext / "stem11.csv")["Gene"].str.strip().tolist(),
+}
+
+# TCGA's older annotation uses previous symbols for two Stem11 genes; EFCC1 is absent under either name
+legacy_alias = {"CAVIN2": "SDPR", "PRXL2A": "FAM213A"}
+signatures = {name: [legacy_alias.get(g, g) for g in genes]
+              for name, genes in signatures.items()}
+```
+
+## Score signatures
+
+```{python}
+#| label: score
+
+z = expr.sub(expr.mean(axis=1), axis=0).div(expr.std(axis=1).replace(0, np.nan), axis=0)
+
+for name, genes in signatures.items():
+    present = [g for g in genes if g in z.index]
+    missing = sorted(set(genes) - set(present))
+    print(f"{name}: {len(present)}/{len(genes)} genes found; "
+          f"missing: {missing if len(missing) <= 10 else len(missing)}")
+    scores = z.loc[present].mean(axis=0)
+    cohort[name] = cohort["PATIENT_ID"].map(scores)
+
+cohort = cohort.dropna(subset=list(signatures))
+print(f"Final analysis cohort: {len(cohort)} patients")
+```
+
+## Cox proportional-hazards models (primary inference)
+
+```{python}
+#| label: cox
+
+results = []
+for name in signatures:
+    df = cohort[["time", "event", "AGE", name]].copy()
+    df[name] = (df[name] - df[name].mean()) / df[name].std()   # HR per 1 SD
+
+    cph = CoxPHFitter()
+    cph.fit(df, duration_col="time", event_col="event")
+    ph = proportional_hazard_test(cph, df, time_transform="rank")
+
+    row = cph.summary.loc[name]
+    results.append({
+        "signature": name,
+        "HR_per_SD": np.exp(row["coef"]),
+        "CI_low": np.exp(row["coef lower 95%"]),
+        "CI_high": np.exp(row["coef upper 95%"]),
+        "p": row["p"],
+        "PH_test_p": ph.summary.loc[name, "p"],
+        "n": len(df), "events": int(df["event"].sum()),
+    })
+    print(f"--- {name} (age-adjusted) ---")
+    print(cph.summary[["exp(coef)", "exp(coef) lower 95%", "exp(coef) upper 95%", "p"]].round(4))
+
+res_df = pd.DataFrame(results)
+res_df.to_csv(out_dir / "cox_results.csv", index=False)
+res_df.round(4)
+```
+
+## Kaplan-Meier display (median split)
+
+```{python}
+#| label: km
+#| fig-width: 11
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+km_export = []
+for ax, name in zip(axes, signatures):
+    hi = cohort[name] >= cohort[name].median()
+    lr = logrank_test(cohort.loc[hi, "time"], cohort.loc[~hi, "time"],
+                      cohort.loc[hi, "event"], cohort.loc[~hi, "event"])
+    for mask, lab in [(hi, f"{name} high"), (~hi, f"{name} low")]:
+        km = KaplanMeierFitter()
+        km.fit(cohort.loc[mask, "time"], cohort.loc[mask, "event"], label=lab)
+        km.plot_survival_function(ax=ax, ci_show=True)
+    ax.set_title(f"{name}: log-rank p = {lr.p_value:.2e}")
+    ax.set_xlabel("Months"); ax.set_ylabel("Overall survival")
+    km_export.append(cohort.assign(signature=name, group=np.where(hi, "high", "low"))
+                     [["PATIENT_ID", "signature", "group", "time", "event", name]]
+                     .rename(columns={name: "score"}))
+plt.tight_layout(); plt.show()
+
+pd.concat(km_export).to_csv(out_dir / "km_data.csv", index=False)
+```
+
+TCGA-LAML is a single retrospective cohort, the scores are evaluated in the same cohort they are applied to, and an age-adjusted hazard ratio is a prognostic association, not a causal effect.

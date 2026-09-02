@@ -1,0 +1,9 @@
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    code-fold: show          # code shown, collapsible
+    embed-resources: true    # one self-contained HTML per stage
+    fig-width: 9
+    fig-height: 5.5

@@ -1,0 +1,33 @@
+name: preleuk_r
+channels: [conda-forge, bioconda]
+dependencies:
+    - r-base=4.3                     # base R
+    - quarto                         # creating quarto files
+    - r-seurat=5.*                   # scRNAseq suite
+    - r-hdf5r                        # read 10x h5 files
+    - r-tidyverse                    # data manipulation
+    - bioconductor-geoquery          # programmatic GEO metadata + downloads
+    - r-languageserver               # language server for R
+    - r-rmarkdown                    # renders via knitr engine
+    - r-here                         # project-root-anchored paths (.here sentinel)
+    # --- stage 02: cell calling + QC ---
+    - bioconductor-dropletutils      # emptyDrops cell calling, barcodeRanks
+    - bioconductor-scater            # SingleCellExperiment QC plots + scuttle (MAD outlier filters)
+    - bioconductor-scdblfinder       # doublet detection (per sample)
+    # --- stage 03: normalization + integration ---
+    - bioconductor-scran             # pooled size-factor normalization
+    - r-harmony                      # fast, well-benchmarked batch integration
+    # --- stage 04: annotation ---
+    - bioconductor-singler           # reference-based per-cell annotation with score pruning
+    # --- stage 05: composition + differential expression ---
+    - bioconductor-speckle           # propeller: sample-level cell-composition inference
+    - bioconductor-edger             # pseudobulk DE (NB GLM-QL); brings limma
+    # --- export + reporting ---
+    - r-ggrepel                      # non-overlapping plot labels
+    - r-patchwork                    # plot composition
+    - r-knitr                        # kable tables in rendered docs
+    # --- dashboard ---
+    - r-shiny                        # dashboard framework
+    - r-bslib                        # modern shiny theming
+    - r-plotly                       # interactive plots (Aequorea-themed)
+    - r-dt                           # interactive tables

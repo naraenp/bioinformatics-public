@@ -16,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 
-# Aequorea palette (see naraen.net / plant_rnaseq_nf make_heatmap.py).
+# Aequorea palette (see naraen.net).
 PAL = {"bg": "#0A141A", "grid": "#163239", "text": "#BBD7DC",
        "low": "#0A141A", "high": "#4BDDE6"}
 PROP_SCALE = [[0.0, "#0A141A"], [0.35, "#294E57"], [0.7, "#8CB6BE"], [1.0, "#DBEBEE"]]

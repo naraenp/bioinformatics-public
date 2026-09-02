@@ -1,0 +1,16 @@
+name: preleuk_py
+channels: [conda-forge, bioconda]
+dependencies:
+    - python=3.11
+    - scanpy=1.10.*        # core scRNA-seq analysis (AnnData, DPT pseudotime)
+    - cellrank=2.*         # fate mapping via Markov transition kernels
+    - anndata               # h5ad container
+    - python-igraph         # graph backend for clustering/paga
+    - leidenalg             # leiden community detection
+    - lifelines             # survival analysis: KM, Cox PH, assumption checks
+    - jupyter               # kernel for quarto's jupyter engine
+    - matplotlib
+    - seaborn
+    - pandas
+    - scipy
+    - statsmodels           # multiple-testing utilities

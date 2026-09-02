@@ -1,0 +1,114 @@
+---
+title: "02 - Cell calling, quality control, and doublet detection"
+---
+
+This stage turns each raw droplet matrix into a set of QC-passing single cells. Three steps run per sample: cell calling, adaptive quality filtering, and doublet removal. Each sample is processed on its own, so no sample's thresholds depend on another's.
+
+Cell calling uses `emptyDrops` (Lun et al. 2019). It estimates the ambient RNA profile from barcodes with 100 or fewer UMIs and tests every other barcode against that profile, calling cells at FDR 0.001. Barcodes above the knee of the rank curve are always kept. This replaces the fixed gene-count cutoff of the original analysis, which cannot separate a small cell from an empty droplet and controls no error rate.
+
+Quality thresholds are set per sample. Cells more than 3 MADs below the sample median in library size or detected genes, or more than 3 MADs above in mitochondrial fraction, are removed; all three are computed on the log scale, where the metrics are roughly symmetric. The MAD is robust to the outliers being screened. A fixed floor of 200 detected genes is kept as a guard for uniformly poor libraries. The original pipeline applied one cutoff to all 38 samples, which mixes library depth with cell quality. The original upper gene cutoff is dropped because high-complexity outliers are mostly doublets, which are handled by the next step.
+
+Doublets are detected with `scDblFinder` (Germain et al. 2021), which simulates doublets from random pairs of cells within a sample and scores each real cell against them. The original analysis had no doublet step; undetected doublets create false intermediate states in integration and trajectory analysis.
+
+```{r}
+#| label: setup
+#| message: false
+
+library(here)
+library(tidyverse)
+source(here("bin", "qc_functions.R"))
+
+sample_sheet <- read_csv(here("data", "raw", "sample_metadata.csv"), show_col_types = FALSE)
+stopifnot(nrow(sample_sheet) == 38, all(file.exists(sample_sheet$file_path)))
+
+qc_dir <- here("data", "processed", "02_qc")
+dir.create(qc_dir, recursive = TRUE, showWarnings = FALSE)
+```
+
+## Run per-sample QC
+
+The per-sample computation runs in separate R processes (`bin/run_qc_one.R`, four at a time with `xargs`) rather than by forking inside this document, because HDF5 and BLAS state is not fork-safe. Workers skip samples that already have output, so this chunk only runs any sample that is still missing and then collects the 38 result files. To run the batch by hand from the project root:
+
+```
+awk -F, 'NR>1{print $NF, $1}' data/raw/sample_metadata.csv |
+  xargs -P 4 -n 2 sh -c 'Rscript bin/run_qc_one.R "$1" "$2" data/processed/02_qc' w
+```
+
+```{r}
+#| label: run-qc
+#| message: false
+
+for (i in seq_len(nrow(sample_sheet))) {
+  gsm <- sample_sheet$gsm[i]
+  if (!file.exists(file.path(qc_dir, paste0("meta_", gsm, ".rds")))) {
+    status <- system2("Rscript", c(here("bin", "run_qc_one.R"),
+                                   sample_sheet$file_path[i], gsm, qc_dir))
+    stopifnot(status == 0)
+  }
+}
+
+metas <- lapply(sample_sheet$gsm,
+                \(g) readRDS(file.path(qc_dir, paste0("meta_", g, ".rds"))))
+qc_summary  <- bind_rows(lapply(metas, `[[`, "summary")) %>%
+  left_join(select(sample_sheet, gsm, title, model, condition), by = "gsm") %>%
+  relocate(title, model, condition, .after = gsm)
+rank_curves <- bind_rows(lapply(metas, `[[`, "rank_curve")) %>%
+  left_join(select(sample_sheet, gsm, model), by = "gsm")
+
+write_csv(qc_summary, file.path(qc_dir, "qc_summary.csv"))
+knitr::kable(qc_summary)
+```
+
+## Barcode-rank curves
+
+Each line is one sample's barcode-rank curve on log-log axes. The drop between the plateau of real cells and the ambient tail is where cell calling operates. Its position differs by sample, which is why one global UMI cutoff would miscall cells in some libraries.
+
+```{r}
+#| label: knee-plot
+#| warning: false
+#| fig-height: 6
+
+ggplot(rank_curves, aes(rank, total, group = gsm, color = model)) +
+  geom_line(alpha = 0.6, linewidth = 0.4) +
+  scale_x_log10() + scale_y_log10() +
+  labs(x = "Barcode rank", y = "Total UMI count", color = "Model",
+       title = "Barcode-rank curves, all 38 samples") +
+  theme_minimal()
+```
+
+## QC filtering overview
+
+```{r}
+#| label: qc-overview
+#| fig-height: 6
+
+qc_long <- qc_summary %>%
+  transmute(title, model, condition,
+            called      = n_called,
+            `QC removed`= n_discard_qc,
+            doublets    = n_doublet,
+            final       = n_final) %>%
+  pivot_longer(called:final)
+
+ggplot(qc_long %>% filter(name %in% c("called", "final")),
+       aes(title, value, fill = name)) +
+  geom_col(position = "dodge") +
+  facet_grid(~model, scales = "free_x", space = "free_x") +
+  labs(x = NULL, y = "Cells", fill = NULL,
+       title = "Cells called vs. cells surviving QC + doublet removal") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 6))
+```
+
+The per-sample thresholds (`thr_lib`, `thr_feat`, `thr_mito`) vary widely across samples. Notes on the summary table:
+
+- `n_called` counts barcodes passing `emptyDrops` at FDR 0.001 or above the knee.
+- The QC columns count removals by criterion; a cell can fail more than one. `n_under_floor` counts cells removed only by the 200-gene floor.
+- `n_doublet / n_called` is the per-sample doublet rate, which rises with the number of loaded cells (about 0.8% per 1,000 cells).
+
+## Session info
+
+```{r}
+#| label: session-info
+sessionInfo()
+```

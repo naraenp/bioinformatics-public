@@ -1,26 +1,16 @@
 #!/usr/bin/env python3
-"""Build a raw count matrix from real RNA-seq data (recount3).
+"""Build a raw count matrix from recount3 (TCGA-LAML vs. GTEx whole blood).
 
-Combines TCGA-LAML (AML) and GTEx whole blood (healthy) gene-level sums
-from the recount3 project into a single counts matrix + sample metadata
-table for the downstream stages (NORMALIZE_COUNTS, RUN_DE, MAKE_VOLCANO).
+Parses the GENCODE v26 GTF for an Ensembl -> HGNC map, loads both count
+matrices, subsamples each cohort to --n-per-group, inner-joins on Ensembl ID,
+maps to symbols, and keeps genes with CPM >= 1 in >= 25% of samples (an
+edgeR-style filter on pooled expression, so it stays independent of the group
+contrast). Writes counts_raw.tsv and metadata.tsv.
 
-Inputs (gzipped TSVs as published by recount3 at duffel.rail.bio, plus the
-GENCODE v26 GTF for Ensembl gene_id -> HGNC symbol mapping):
-
-  - tcga.gene_sums.LAML.G026.gz          AML counts (rows: Ensembl gene IDs)
-  - gtex.gene_sums.BLOOD.G026.gz         Healthy counts (whole blood)
-  - gencode.v26.basic.annotation.gtf.gz  Ensembl gene_id -> HGNC symbol map
-
-Steps: parse the GENCODE GTF for a gene_id -> symbol map; load both count
-matrices; subsample each cohort to --n-per-group; inner-join on Ensembl ID;
-map to HGNC symbols; filter to genes with CPM >= 1 in >= 25% of samples
-(edgeR-style); write counts_raw.tsv (rows = symbols) + metadata.tsv.
-
-GTEx has no bone-marrow tissue, so whole peripheral blood is the closest
-large healthy bulk-RNA-seq comparator; canonical AML markers (FLT3, MEIS1,
-HOXA9, CD34, MPO, ...) are still strongly enriched in immature myeloid
-blasts relative to mature peripheral cells.
+Caveat: GTEx has no bone marrow, so whole blood is the closest large healthy
+comparator. Cohort is therefore confounded with disease, tissue and collection
+protocol at once -- see docs/REPORT.md before reading anything biological into
+the direction of a fold change.
 """
 from __future__ import annotations
 

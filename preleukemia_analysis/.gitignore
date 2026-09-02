@@ -1,0 +1,12 @@
+# regenerable data; rebuilt from analysis/01_data_acquisition.qmd onward
+/data/
+# quarto render files (rendered analysis/*.html are kept)
+analysis/*_files/
+.quarto/
+**/*.quarto_ipynb
+# small dashboard inputs are kept even though the repo root ignores *.rds
+!dashboard/data/*.rds
+# editor settings with machine-specific paths (keep the .example)
+.vscode/settings.json
+.Rhistory
+.RData

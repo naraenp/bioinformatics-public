@@ -1,0 +1,151 @@
+---
+title: "04 - Reference-based cell-type annotation"
+---
+
+Cell types are assigned per cell with SingleR (Aran et al. 2019), using the Dahlin et al. 2018 mouse bone-marrow HSPC atlas as the reference (about 44k LK/LSK cells; the `dataset` field of the object identifies it as Dahlin, and it is the reference used by the source paper).
+
+SingleR scores each cell by Spearman correlation with each reference label on label-specific marker genes and refines the top candidates iteratively. It works on the normalized expression directly, so the annotation does not depend on the Harmony integration. It also returns a confidence score per cell and prunes low-confidence assignments instead of forcing every cell into a label, which the original label transfer did.
+
+The reference's own `Unassigned` cells are dropped because that label carries no meaning to transfer, and the reference is aggregated into per-label pseudo-cells (`aggr.ref = TRUE`) to keep annotation of 230k cells fast.
+
+The labels are checked two ways below: agreement with the unsupervised clusters from stage 03, and expression of canonical marker genes that do not come from the reference.
+
+```{r}
+#| label: setup
+#| message: false
+
+library(here)
+library(tidyverse)
+library(Seurat)
+library(SingleR)
+library(BiocParallel)
+
+int_dir <- here("data", "processed", "03_integration")
+ann_dir <- here("data", "processed", "04_annotation")
+dir.create(ann_dir, recursive = TRUE, showWarnings = FALSE)
+
+seu <- readRDS(file.path(int_dir, "seurat_integrated.rds"))
+ref <- readRDS(here("data", "reference", "reference_atlas.rds"))
+```
+
+## Run SingleR
+
+```{r}
+#| label: singler
+#| message: false
+#| warning: false
+
+ref <- subset(ref, subset = celltype != "Unassigned")
+ref <- NormalizeData(ref, verbose = FALSE)
+
+set.seed(42)
+pred <- SingleR(
+  test    = GetAssayData(seu, assay = "RNA", layer = "data"),
+  ref     = GetAssayData(ref, assay = "RNA", layer = "data"),
+  labels  = ref$celltype,
+  aggr.ref = TRUE,
+  BPPARAM = MulticoreParam(8)
+)
+
+seu$celltype        <- pred$labels
+seu$celltype_pruned <- pred$pruned.labels   # NA = low-confidence assignment
+seu$singler_delta   <- pred$delta.next
+
+cat(sprintf("Low-confidence (pruned) assignments: %d of %d cells (%.2f%%)\n",
+            sum(is.na(pred$pruned.labels)), ncol(seu),
+            100 * mean(is.na(pred$pruned.labels))))
+sort(table(seu$celltype), decreasing = TRUE)
+```
+
+## Verification 1 - concordance with unsupervised clusters
+
+Rows are clusters from stage 03, columns are SingleR labels, and values are row proportions. Good annotation shows each cluster dominated by one label or by adjacent developmental stages.
+
+```{r}
+#| label: cluster-concordance
+
+conc <- table(cluster = seu$seurat_clusters, label = seu$celltype)
+knitr::kable(round(prop.table(conc, margin = 1), 2))
+```
+
+## Verification 2 - canonical markers
+
+Marker genes are taken from the hematopoiesis literature, independent of the Dahlin reference. Each label should express its defining genes.
+
+```{r}
+#| label: marker-dotplot
+#| fig-height: 6
+#| fig-width: 11
+#| warning: false
+
+markers <- c(
+  Hlf = "HSC", Procr = "HSC", Mecom = "HSC",
+  Gata1 = "Ery", Klf1 = "Ery", `Hba-a1` = "Ery",
+  Pf4 = "Mk", Itga2b = "Mk",
+  Elane = "Neu", Ltf = "Neu", Camp = "Neu",
+  Csf1r = "Mono/DC", Irf8 = "Mono/DC",
+  Dntt = "Lym", Il7r = "Lym",
+  Prss34 = "Baso", Cpa3 = "Mast/Baso"
+)
+DotPlot(seu, features = names(markers), group.by = "celltype") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Canonical marker expression by assigned label")
+```
+
+## Annotated UMAP
+
+```{r}
+#| label: umap-celltype
+#| fig-height: 6
+#| fig-width: 13
+
+DimPlot(seu, reduction = "umap", group.by = "celltype", label = TRUE, repel = TRUE) +
+  DimPlot(seu, reduction = "umap", group.by = "condition")
+```
+
+## Save and export for Python stages
+
+The annotated object is saved, and counts, metadata, and embeddings are exported as MatrixMarket and csv files for the Python trajectory stage. Plain formats are used because rds-to-h5ad converters are fragile.
+
+```{r}
+#| label: save-export
+#| message: false
+
+seu[["RNA"]]$scale.data <- NULL            # scaled data is not needed again; saves 3.7 GB
+saveRDS(seu, file.path(ann_dir, "seurat_annotated.rds"))
+seu[["RNA"]]$data <- NULL                  # normalized layer is not needed for the export below; frees ~8 GB
+invisible(gc())
+
+# per-sample cell-type counts for stage 05; dplyr::count spelled out because
+# matrixStats (loaded by SingleR) masks count()
+celltype_counts <- seu@meta.data %>%
+  dplyr::count(gsm, title, model, condition, sex, age, treatment, platform, celltype)
+write_csv(celltype_counts, file.path(ann_dir, "celltype_counts.csv"))
+
+export_dir <- file.path(ann_dir, "py_export")
+dir.create(export_dir, showWarnings = FALSE)
+
+# stratified subsample for the trajectory stage (up to 2,500 cells per sample, ~90k cells);
+# stage 05 uses the full object
+set.seed(42)
+sub_cells <- seu@meta.data %>% as_tibble(rownames = "cell") %>%
+  group_by(gsm) %>% slice_sample(n = 2500) %>% pull(cell)
+cat("Export subsample:", length(sub_cells), "cells\n")
+
+# subset the sparse matrix directly; subsetting the Seurat object would copy every layer
+Matrix::writeMM(GetAssayData(seu, layer = "counts")[, sub_cells], file.path(export_dir, "counts.mtx"))
+write_lines(rownames(seu), file.path(export_dir, "genes.txt"))
+write_csv(seu@meta.data[sub_cells, ] %>% as_tibble(rownames = "cell"), file.path(export_dir, "obs.csv"))
+write_csv(as_tibble(Embeddings(seu, "harmony")[sub_cells, 1:30], rownames = "cell"),
+          file.path(export_dir, "harmony.csv"))
+write_csv(as_tibble(Embeddings(seu, "umap")[sub_cells, ], rownames = "cell"),
+          file.path(export_dir, "umap.csv"))
+cat("Export complete:", length(list.files(export_dir)), "files\n")
+```
+
+## Session info
+
+```{r}
+#| label: session-info
+sessionInfo()
+```

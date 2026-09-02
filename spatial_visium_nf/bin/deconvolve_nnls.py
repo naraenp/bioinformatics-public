@@ -1,34 +1,20 @@
 #!/usr/bin/env python3
 """DECONVOLVE — per-spot cell-type deconvolution by non-negative least squares.
 
-For each Visium spot we model its (library-size-normalised, linear) expression
-as a non-negative mixture of the reference cell-type signatures and solve
+A Visium spot holds several cells, so its expression is a mixture. For each spot
+we solve `minimise ||S w - x||_2` subject to `w >= 0` (scipy.optimize.nnls) and
+normalise the weights to proportions.
 
-    minimise || S w - x ||_2   subject to  w >= 0
+Each gene is first divided by its mean signature level. Without this, the fit is
+dominated by a few very high-expression genes (immunoglobulins here) and collapses
+onto one or two cell types on real data. It is weighted least squares with one
+deterministic weight per gene; RCTD and cell2location are the principled fix, since
+they model counts and return uncertainty.
 
-with scipy.optimize.nnls, then normalise w to proportions summing to 1. This is
-the required, default deconvolution: transparent, fast, dependency-light, and —
-on the synthetic demo — recoverable against the planted ground truth. (The
-optional cell2location / RCTD comparison is a separate v1.1 stage in a heavier
-env; this NNLS path is the on-brand analogue of the hand-rolled DE/ORA in the
-plant and AML pipelines.)
-
-Per-gene weighting: a plain L2 fit in linear space is dominated by the handful
-of very high-expression genes (immunoglobulins, etc.), so spiky immune
-signatures absorb every spot — on real cross-platform data the fit collapses
-onto a couple of cell types. We therefore divide each gene (both the signature
-and the spot) by its mean signature level before solving, i.e. minimise
-sum_g (1/mean_g^2) (S_g w - x_g)^2. This inverse-mean weighting puts genes on a
-comparable scale so the fit reflects all cell types, not just the loudest genes.
-It is still fully transparent (one deterministic factor per gene) and leaves the
-matched synthetic demo — where every gene is already on the same scale —
-unchanged within tolerance. The proper probabilistic correction for the
-cross-platform shift is the v1.1 cell2location / RCTD bake-off.
-
-Input:  spatial_norm.h5ad (X = linear normalised over HVGs) + signature.tsv
-Output: proportions.tsv (spot x cell-type proportions, + dominant_type, coords)
-Self-check: with --truth (planted proportions) it reports MAE / correlation and,
-with --check, exits non-zero if the mean absolute error exceeds --tol.
+Input:  spatial_norm.h5ad (linear normalised over HVGs) + signature.tsv
+Output: proportions.tsv (spot x cell type, + dominant_type, coords)
+Self-check: --truth reports MAE / correlation vs planted proportions; --check
+exits non-zero if the MAE exceeds --tol.
 """
 from __future__ import annotations
 

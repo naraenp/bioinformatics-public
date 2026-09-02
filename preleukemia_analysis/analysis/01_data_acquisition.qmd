@@ -1,0 +1,151 @@
+---
+title: "01 - Data Acquisition"
+format: html
+---
+
+### Download GEO samples
+
+This section downloads the GEO samples used in the analysis. The samples are downloaded from the GEO database using the GEOquery package in R. The following code snippet demonstrates how to download the samples along with the expected output. We are downloading samples from the paper found here: https://doi.org/10.1016/j.xgen.2023.100426. The data from this paper is found at GSE accession number GSE227026. We expect to see a sample count of 38 scRNAseq samples as h5 files
+
+```{r}
+#| label: fetch-metadata
+#| message: false
+
+gse_num <- "GSE227026"
+
+library(here)
+raw_dir <- here("data", "raw")
+geo_cache <- here("data", "raw", "geo_cache")
+dir.create(geo_cache, recursive = TRUE, showWarnings = FALSE)  # idempotent; showWarnings off since existing is fine
+
+library(GEOquery)
+gse <- getGEO(gse_num, GSEMatrix = TRUE, getGPL = FALSE, destdir = geo_cache) # getGPL is false, platform information is not needed as H5 files contain their own gene annotations.
+
+library(dplyr)
+pd <- bind_rows(lapply(gse, pData))   # one row per sample, both platforms stacked
+stopifnot(nrow(pd) == 38)             # fails loudly (with a named error) if GEO ever returns something else
+glimpse(pd)                           # compact look at every column — do this once and actually read it
+
+```
+
+### Build the sample sheet
+
+The sample `title` encodes model, group, and replicate (e.g. `Jak2_Mut_2`), and GEO
+provides already-parsed characteristics columns (`genotype:ch1`, `Sex:ch1`, `age:ch1`,
+`treatment:ch1`) that we take as-is rather than re-parsing. Two title quirks need
+deliberate handling: the Npm1c model's WT samples are titled `Npm1_WT`
+(same model, inconsistent spelling — recoded to `Npm1c`), and the Ezh2/Utx models use
+`KO` instead of `Mut`, so `condition` is defined as WT vs. everything-else rather than
+by matching the string "Mut". Sex, age, treatment, and platform are kept as columns
+because they vary across samples and are candidate covariates for integration and
+composition analysis later.
+
+```{r}
+#| label: sample-sheet
+#| message: false
+
+library(tidyr)
+library(readr)
+
+sample_sheet <- pd %>%
+  transmute(
+    gsm           = geo_accession,
+    title         = title,
+    platform      = platform_id,
+    sex           = `Sex:ch1`,
+    age           = `age:ch1`,
+    treatment     = `treatment:ch1`,
+    genotype_full = `genotype:ch1`,          # exact allele, e.g. "Jak2 V617F Hom"
+    supp_url      = supplementary_file_1
+  ) %>%
+  separate(title, into = c("model", "group", "replicate"), sep = "_", remove = FALSE) %>%
+  mutate(
+    model     = recode(model, "Npm1" = "Npm1c"),           # unify the two spellings of the Npm1c model
+    condition = if_else(group == "WT", "WT", "Mutant"),    # KO and Mut both mean the perturbed allele
+    file_path = file.path(raw_dir, basename(supp_url)),
+    .after    = replicate
+  ) %>%
+  arrange(model, condition, replicate)
+
+stopifnot(
+  nrow(sample_sheet) == 38,
+  n_distinct(sample_sheet$model) == 8,       # the eight preleukemic models
+  !any(duplicated(sample_sheet$gsm))
+)
+
+# the full sheet in the rendered document shows how each sample was classified
+sample_sheet %>% select(-supp_url, -file_path) %>% knitr::kable()
+
+# WT and Mutant replicates per model
+sample_sheet %>% count(model, condition) %>% pivot_wider(names_from = condition, values_from = n)
+
+write_csv(sample_sheet, file.path(raw_dir, "sample_metadata.csv"))
+```
+
+### Download raw h5 files
+
+Each sample's `supplementary_file_1` URL from the GEO record points to the CellRanger raw feature-barcode matrix. These matrices are unfiltered, so they contain every droplet barcode; cell calling is done in stage 02. Files that are already present are skipped. Each download is written to a `.part` file and renamed only when complete, so an interrupted download cannot pass as a finished one. The `ftp://` scheme is rewritten to `https://` because NCBI serves both and https is more reliable through firewalls.
+
+```{r}
+#| label: download-h5
+
+options(timeout = 3600)  # the default 60 s timeout is too short for large files
+
+for (i in seq_len(nrow(sample_sheet))) {
+  url  <- sub("^ftp://", "https://", sample_sheet$supp_url[i])
+  dest <- sample_sheet$file_path[i]
+  if (file.exists(dest)) {
+    message("skip (already present): ", basename(dest))
+    next
+  }
+  message(sprintf("[%d/%d] downloading %s", i, nrow(sample_sheet), basename(dest)))
+  tmp <- paste0(dest, ".part")
+  download.file(url, tmp, mode = "wb", quiet = TRUE)  # binary mode; text mode corrupts h5 files
+  file.rename(tmp, dest)
+}
+```
+
+### Verify downloads
+
+Every file is opened with `Read10X_h5()` and its dimensions are checked. Genes should be in the mouse transcriptome range, and because these are raw matrices the barcode count is the full droplet space rather than the number of cells. An md5 checksum per file is written to `manifest.csv` so corruption or a swapped file can be detected later.
+
+```{r}
+#| label: verify
+#| message: false
+
+library(Seurat)
+
+stopifnot(all(file.exists(sample_sheet$file_path)))
+
+manifest <- lapply(seq_len(nrow(sample_sheet)), function(i) {
+  f <- sample_sheet$file_path[i]
+  counts <- Read10X_h5(f)
+  d <- dim(counts)
+  rm(counts); invisible(gc(verbose = FALSE))   # free memory between files
+  tibble(
+    file       = basename(f),
+    gsm        = sample_sheet$gsm[i],
+    n_genes    = d[1],
+    n_barcodes = d[2],
+    size_mb    = round(file.size(f) / 1e6, 1),
+    md5        = unname(tools::md5sum(f))
+  )
+}) %>% bind_rows()
+
+stopifnot(
+  nrow(manifest) == 38,
+  all(manifest$n_genes > 15000),      # plausible mouse transcriptome
+  all(manifest$n_barcodes > 10000)    # raw droplet space; far more barcodes than cells
+)
+
+knitr::kable(manifest)
+write_csv(manifest, file.path(raw_dir, "manifest.csv"))
+```
+
+### Other inputs
+
+The remaining inputs are not downloaded here; they are listed so that provenance is in one place.
+
+- `data/reference/reference_atlas.rds`: the Dahlin et al. 2018 mouse bone-marrow HSPC atlas, used for annotation in stage 04.
+- `data/external/plps.csv` and `stem11.csv`: the PLPS and Stem11 gene signatures from the Isobe et al. supplement, used in stage 07.
+- `data/external/laml_tcga_expression.tsv` and `laml_tcga_clinical.tsv`: TCGA-LAML expression and clinical tables from cBioPortal, used in stage 07.

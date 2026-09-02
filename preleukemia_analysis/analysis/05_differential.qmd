@@ -1,0 +1,184 @@
+---
+title: "05 - Composition and differential expression (sample-level inference)"
+---
+
+This stage tests whether cell-type composition and gene expression differ between mutant and WT samples. Both tests treat the mouse, not the cell, as the unit of replication: 230k cells from 38 mice is n = 38. Treating cells as replicates (pseudoreplication) shrinks standard errors with cell count instead of animal count and gives p-values that do not reflect biological variability (Squair et al. 2021).
+
+Composition is tested with propeller (Phipson et al. 2022). Each sample contributes one proportion per cell type. Proportions are logit-transformed and modeled per cell type with limma, whose empirical-Bayes variance moderation borrows strength across cell types at small n. The design is `~ model + condition`, so the condition effect is estimated within mutation models. This replaces the original chi-square test on the pooled cell table, whose independence assumption is violated by cells from the same mouse.
+
+Differential expression uses pseudobulk: raw counts are summed per sample and cell type, then modeled with edgeR quasi-likelihood, a negative binomial GLM whose F-tests hold their type-I error at small n. The same `~ model + condition` design is used, so the reported effect is the mutant-versus-WT signal shared across models. Per-model effects are shown descriptively only, since 2 to 3 mice per arm is too few to test.
+
+```{r}
+#| label: setup
+#| message: false
+
+library(here)
+library(tidyverse)
+library(speckle)
+library(limma)
+library(edgeR)
+library(Seurat)
+library(ggrepel)
+
+ann_dir <- here("data", "processed", "04_annotation")
+de_dir  <- here("data", "processed", "05_differential")
+dir.create(de_dir, recursive = TRUE, showWarnings = FALSE)
+
+celltype_counts <- read_csv(file.path(ann_dir, "celltype_counts.csv"), show_col_types = FALSE)
+sample_info <- celltype_counts %>%
+  distinct(gsm, title, model, condition, sex, age, treatment, platform) %>%
+  mutate(condition = factor(condition, levels = c("WT", "Mutant")))
+```
+
+## The original test, for comparison
+
+```{r}
+#| label: chisq-demo
+
+pooled <- celltype_counts %>%
+  group_by(celltype, condition) %>% summarise(n = sum(n), .groups = "drop") %>%
+  pivot_wider(names_from = condition, values_from = n, values_fill = 0) %>%
+  column_to_rownames("celltype") %>% as.matrix()
+
+chisq.test(pooled)
+```
+
+The p-value is extremely small, as it would be for almost any two groups of mice, because with 230k cells the test detects mouse-to-mouse variation rather than condition effects. The sample-level test below is the comparison.
+
+## Composition: propeller (logit) with model as covariate
+
+```{r}
+#| label: propeller
+#| message: false
+
+props <- getTransformedProps(
+  clusters = rep(celltype_counts$celltype, celltype_counts$n),
+  sample   = rep(celltype_counts$gsm,      celltype_counts$n),
+  transform = "logit"
+)
+
+design_df <- sample_info[match(colnames(props$TransformedProps), sample_info$gsm), ]
+stopifnot(identical(design_df$gsm, colnames(props$TransformedProps)))
+design <- model.matrix(~ model + condition, data = design_df)
+
+fit <- lmFit(props$TransformedProps, design)
+fit <- eBayes(fit, robust = TRUE)
+prop_res <- topTable(fit, coef = "conditionMutant", number = Inf) %>%
+  as_tibble(rownames = "celltype") %>%
+  arrange(adj.P.Val)
+
+knitr::kable(prop_res, digits = 4,
+  caption = "Moderated t-tests on logit proportions; logFC is on the logit scale (Mutant - WT), adj.P.Val is Benjamini-Hochberg FDR.")
+write_csv(prop_res, file.path(de_dir, "composition_propeller.csv"))
+```
+
+After accounting for biological replication, no cell type shows a shared mutant-versus-WT shift at FDR 0.05, compared with p < 10^-15 from the chi-square test. Two points for interpretation. First, this is a statement about a common effect across eight mutation models with 2 to 3 mice per arm, not an absence of biology: the models are known to expand different lineages (Jak2 and Calr toward megakaryocyte-erythroid, Flt3 and Npm1c toward myeloid), so a single additive condition term can average opposing shifts toward zero. The appropriate next step is a model-by-condition interaction, which this design cannot power. Second, every logit fold change is negative, which is only possible for proportions that sum to one if mutant samples are more heterogeneous than WT: when each model expands a different lineage, most cell types are depleted in most mutant samples and expanded in a few, and the mean of the logits falls for all of them (Jensen's inequality). Heterogeneity across models is the dominant effect, which the per-model panel below shows.
+
+```{r}
+#| label: proportion-plots
+#| fig-height: 6
+#| fig-width: 12
+
+prop_df <- celltype_counts %>%
+  group_by(gsm) %>% mutate(prop = n / sum(n)) %>% ungroup()
+
+ggplot(prop_df, aes(celltype, prop, fill = condition)) +
+  geom_boxplot(outlier.size = 0.6, position = position_dodge(width = 0.8)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.12, dodge.width = 0.8),
+             size = 0.7, alpha = 0.6) +
+  labs(x = NULL, y = "Proportion of sample", fill = NULL,
+       title = "Cell-type proportions per sample (each point = one mouse)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+#| label: proportion-by-model
+#| fig-height: 8
+#| fig-width: 12
+
+ggplot(prop_df, aes(celltype, prop, color = condition)) +
+  geom_point(position = position_dodge(width = 0.6), size = 1) +
+  facet_wrap(~model, ncol = 4) +
+  labs(x = NULL, y = "Proportion", color = NULL,
+       title = "Per-model view (descriptive; 2-3 mice per arm - not formally tested)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 7))
+```
+
+## Differential expression: pseudobulk + edgeR quasi-likelihood
+
+Pseudobulk units with fewer than 20 cells are dropped because sums over a handful of cells are dominated by sampling noise. A cell type is tested only if it has at least 4 samples per condition.
+
+```{r}
+#| label: pseudobulk
+#| message: false
+#| warning: false
+
+seu <- readRDS(file.path(ann_dir, "seurat_annotated.rds"))
+pb <- AggregateExpression(seu, assays = "RNA", group.by = c("celltype", "gsm"),
+                          return.seurat = FALSE)$RNA
+rm(seu); invisible(gc())
+
+pb_meta <- tibble(colname = colnames(pb)) %>%
+  separate(colname, into = c("celltype", "gsm"), sep = "_(?=GSM)", remove = FALSE) %>%
+  left_join(sample_info, by = "gsm") %>%
+  left_join(celltype_counts %>% mutate(celltype = gsub("_", "-", celltype)) %>%
+              select(gsm, celltype, n_cells = n),
+            by = c("gsm", "celltype"))
+
+testable <- pb_meta %>%
+  filter(n_cells >= 20) %>%
+  dplyr::count(celltype, condition) %>%
+  pivot_wider(names_from = condition, values_from = n, values_fill = 0) %>%
+  filter(WT >= 4, Mutant >= 4) %>% pull(celltype)
+cat("Cell types tested:", paste(testable, collapse = ", "), "\n")
+
+de_results <- map_dfr(testable, function(ct) {
+  keep_cols <- pb_meta %>% filter(celltype == ct, n_cells >= 20)
+  y <- DGEList(counts = pb[, keep_cols$colname],
+               samples = as.data.frame(keep_cols))
+  design <- model.matrix(~ model + condition, data = keep_cols)
+  y <- y[filterByExpr(y, design = design), , keep.lib.sizes = FALSE]
+  y <- calcNormFactors(y)                      # TMM normalization
+  y <- estimateDisp(y, design)
+  fit <- glmQLFit(y, design)
+  res <- glmQLFTest(fit, coef = "conditionMutant")
+  topTags(res, n = Inf)$table %>% as_tibble(rownames = "gene") %>% mutate(celltype = ct)
+})
+
+de_summary <- de_results %>% group_by(celltype) %>%
+  summarise(n_tested = n(), n_sig = sum(FDR < 0.05),
+            n_up = sum(FDR < 0.05 & logFC > 0), n_down = sum(FDR < 0.05 & logFC < 0))
+knitr::kable(de_summary,
+  caption = "Genes at FDR < 0.05, Mutant vs WT within-model (edgeR QL F-test on pseudobulk)")
+write_csv(de_results, file.path(de_dir, "pseudobulk_de_all.csv"))
+```
+
+The shared DE signal is sparse: no genes in HSCs at FDR 0.05 and at most a dozen in any cell type. This matches the composition result. The contrast asks for a transcriptional program common to eight distinct mutations, and at n = 38 the power for a shared effect is low if per-model effects point in different directions. Cell-level tests would have reported thousands of genes here, most of them artifacts of treating cells as replicates.
+
+```{r}
+#| label: volcano-hsc
+#| fig-height: 6
+#| fig-width: 8
+#| warning: false
+
+hsc <- de_results %>% filter(celltype == "HSCs") %>%
+  mutate(sig = FDR < 0.05 & abs(logFC) > 0.5)
+top_lab <- hsc %>% filter(sig) %>% slice_min(FDR, n = 20)
+
+ggplot(hsc, aes(logFC, -log10(FDR), color = sig)) +
+  geom_point(size = 0.8, alpha = 0.7) +
+  geom_text_repel(data = top_lab, aes(label = gene), size = 3, max.overlaps = 20) +
+  scale_color_manual(values = c(`TRUE` = "#c0392b", `FALSE` = "grey60"), guide = "none") +
+  labs(title = "HSCs: Mutant vs WT (pseudobulk, model-adjusted)",
+       x = "log2 fold change", y = "-log10 FDR") +
+  theme_minimal()
+```
+
+## Session info
+
+```{r}
+#| label: session-info
+sessionInfo()
+```
